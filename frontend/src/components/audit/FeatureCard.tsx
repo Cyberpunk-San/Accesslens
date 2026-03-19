@@ -1,34 +1,23 @@
-'use client';
-
-import { motion } from 'framer-motion';
-import React from 'react';
-
-interface FeatureCardProps {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  delay?: number;
+interface Props {
+  icon: React.ReactNode
+  title: string
+  description: string
 }
 
-export function FeatureCard({ icon, title, description, delay = 0 }: FeatureCardProps) {
+export function FeatureCard({ icon, title, description }: Props) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ delay }}
-      className="glass-card p-10 border-slate-800 hover:border-brand-500/50 transition-colors group relative overflow-hidden"
-    >
-      <div className="absolute -right-8 -bottom-8 opacity-5 group-hover:opacity-10 transition-opacity">
+    <div className="rounded-[28px] border border-white/10 bg-black/28 p-7 text-center backdrop-blur-xl shadow-[0_0_40px_rgba(168,85,247,0.08)] transition duration-300 hover:-translate-y-1 hover:border-cyan-300/20 hover:shadow-[0_0_50px_rgba(34,211,238,0.08)]">
+      <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-400/20 via-fuchsia-400/10 to-cyan-300/20 text-cyan-200">
         {icon}
       </div>
-      
-      <div className="mb-6 p-4 rounded-2xl bg-slate-900 w-fit group-hover:bg-brand-500/10 transition-colors">
-        {icon}
-      </div>
-      
-      <h3 className="text-xl font-black text-white mb-4 italic uppercase tracking-tighter">{title}</h3>
-      <p className="text-slate-400 font-medium leading-relaxed">{description}</p>
-    </motion.div>
-  );
+
+      <h3 className="text-2xl font-semibold text-white leading-tight">
+        {title}
+      </h3>
+
+      <p className="mt-4 text-sm leading-7 text-slate-300">
+        {description}
+      </p>
+    </div>
+  )
 }
