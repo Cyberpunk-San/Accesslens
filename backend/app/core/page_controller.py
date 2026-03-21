@@ -24,6 +24,11 @@ class PageController:
     ) -> Dict[str, Any]:
 
         options = options or {}
+        
+        # Security: Validate URL to prevent SSRF
+        if not self._is_safe_url(url):
+            raise ValueError(f"URL is unsafe or points to a forbidden location: {url}")
+            
         page = None
 
         try:
@@ -57,15 +62,18 @@ class PageController:
 
         except Exception as e:
             self._logger.error(f"Page navigation and extraction failed: {e}")
+            if page:
+                await browser_manager.release_page(page)
             return {
                 "error": str(e),
                 "url": url,
                 "timestamp": self._tree_extractor._get_timestamp()
             }
         finally:
-            if page:
-                await browser_manager.release_page(page)
-                self._current_page = None
+            # We no longer release the page here by default. 
+            # Ownership is transferred to the caller (e.g., AuditOrchestrator)
+            # which MUST ensure it is released eventually.
+            pass
 
     async def _configure_page(self, page: Page, options: Dict[str, Any]):
 
@@ -102,7 +110,10 @@ class PageController:
                 )
 
                 if response and not response.ok:
-                    self._logger.warning(f"Page returned {response.status}: {response.status_text}")
+                    self._logger.debug(
+                        f"Page returned {response.status} for {url} "
+                        "(non-2xx response — audit will continue with available content)"
+                    )
                 
                 return # Success
                 
@@ -184,4 +195,37 @@ class PageController:
             return True
         except Exception as e:
             self._logger.warning(f"Failed to highlight element: {e}")
+            return False
+
+    def _is_safe_url(self, url: str) -> bool:
+        """
+        Validates the URL to prevent SSRF attacks.
+        Checks for local/private IP ranges and reserved hostnames.
+        """
+        try:
+            parsed = urlparse(url)
+            if parsed.scheme not in ["http", "https"]:
+                return False
+            
+            hostname = parsed.hostname
+            if not hostname:
+                return False
+                
+            # Check for local hostnames
+            if hostname.lower() in ["localhost", "127.0.0.1", "0.0.0.0", "::1"]:
+                return False
+                
+            # Check for IP address ranges
+            try:
+                ip_addr = ipaddress.ip_address(hostname)
+                if ip_addr.is_private or ip_addr.is_loopback or ip_addr.is_link_local:
+                    return False
+            except ValueError:
+                # Not an IP address, probably a hostname. 
+                # In a real production environment, we'd also resolve the hostname 
+                # and check the resolved IP, but for now this is a good first layer.
+                pass
+                
+            return True
+        except Exception:
             return False

@@ -1,6 +1,8 @@
 # tests/test_report_storage_units.py
 
 import pytest
+pytestmark = pytest.mark.unit
+
 from datetime import datetime
 from uuid import uuid4
 from app.core.report_storage import ReportStorage

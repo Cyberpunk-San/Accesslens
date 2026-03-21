@@ -3,11 +3,14 @@ export type IssueSeverity = 'critical' | 'serious' | 'moderate' | 'minor';
 
 // Issue sources (engines)
 export type IssueSource = 
-  | 'wcag_deterministic' 
+  | 'wcag' 
   | 'structural' 
   | 'contrast' 
-  | 'ai_contextual' 
-  | 'heuristic';
+  | 'ai' 
+  | 'heuristic'
+  | 'navigation'
+  | 'form'
+  | 'performance';
 
 export type WCAGLevel = 'A' | 'AA' | 'AAA';
 
@@ -45,13 +48,18 @@ export interface RemediationSuggestion {
   code_before?: string;
   code_after?: string;
   estimated_effort?: 'low' | 'medium' | 'high' | 'unknown';
+  estimated_fix_hours?: number;
+  verification_steps?: string[];
 }
 
 // Evidence data
 export interface EvidenceData {
   screenshot?: string;
+  stack_trace?: any;
   computed_values?: Record<string, any>;
+  dom_snapshot?: any;
   ai_reasoning?: string;
+  code_snippet?: string;
 }
 
 // Main issue model
@@ -65,6 +73,7 @@ export interface UnifiedIssue {
   confidence: ConfidenceLevel;
   confidence_score: number;
   source: IssueSource;
+  priority?: string;
   wcag_criteria: WCAGCriteria[];
   location?: ElementLocation;
   actual_value?: string;
@@ -85,6 +94,7 @@ export interface AuditSummary {
   score: number;
   confidence_avg: number;
   coverage_comparator?: Record<string, any>;
+  contrast_patterns?: any[];
 }
 
 // Audit request
@@ -112,6 +122,21 @@ export interface AuditReport {
     node_count: number;
   };
   metadata: Record<string, any>;
+}
+
+// Simplified record for list views
+export interface AuditRecord {
+  id: string;
+  url: string;
+  timestamp: string;
+  score: number;
+  total_issues: number;
+  critical_count: number;
+  serious_count: number;
+  moderate_count: number;
+  minor_count: number;
+  avg_confidence: number;
+  error?: string;
 }
 
 // Engine info

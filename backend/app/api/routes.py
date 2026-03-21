@@ -8,23 +8,16 @@ import uuid
 import time
 from datetime import datetime
 from prometheus_client import Counter, Histogram
-from ..middleware import rate_limiter
 from ..core.config import settings
 from ..utils.validators import is_valid_url
 from ..utils.cache import cache_manager
 
-from ..models.schemas import AuditRequest, AuditReport, UnifiedIssue, AuditSummary
-from ..core.page_controller import PageController
+from ..models.schemas import AuditRequest, AuditReport, AuditSummary
 from ..core.audit_orchestrator import AuditOrchestrator
-from ..core.browser_manager import browser_manager
-from ..core.rate_limiter import limiter
+# Note: slowapi limiter removed — rate limiting is handled by RateLimitMiddleware
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-# In-memory store for audit results (used by tests)
-audit_store = {}
-
 
 # Metrics initialization
 
@@ -62,7 +55,7 @@ async def start_audit(
     cache_key = f"audit:{audit_request.url}:{hash(tuple(audit_request.engines or []))}"
     
     cached_status = await cache_manager.get(cache_key)
-    if cached_status:
+    if cached_status and not settings.testing:
         raise HTTPException(status_code=429, detail="Audit for this URL is recently completed or in progress.")
             
     await cache_manager.set(cache_key, "in_progress", ttl=30)

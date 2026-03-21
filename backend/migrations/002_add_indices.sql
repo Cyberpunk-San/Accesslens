@@ -1,3 +1,5 @@
+-- POSTGRESQL-ONLY MIGRATION — not used by SQLite runtime (see migrations/001_init.sql for details)
+
 -- Performance Indices for Reports and Issues
 
 CREATE INDEX IF NOT EXISTS idx_reports_score ON reports(score);

@@ -6,7 +6,7 @@ from .base import BaseAccessibilityEngine
 from ..models.schemas import (
     UnifiedIssue, IssueSeverity, IssueSource,
     ConfidenceLevel, ElementLocation, RemediationSuggestion,
-    EvidenceData, WCAGCriteria
+    EvidenceData, WCAGCriteria, AuditRequest
 )
 from ..core.color_utils import ColorParser, ContrastCalculator, RGBColor
 from ..core.scoring import ConfidenceCalculator
@@ -23,11 +23,10 @@ class ContrastEngine(BaseAccessibilityEngine):
     async def analyze(
         self,
         page_data: Dict[str, Any],
-        request: Dict[str, Any]
+        request: AuditRequest
     ) -> List[UnifiedIssue]:
         """
-        Coordinates the entire contrast analysis pipeline.
-        Extracts text, UI elements, and interactive states from the Playwright page and returns UnifiedIssues for any contrast failures.
+        Coordinates the entire contrast analysis pipeline with pattern grouping.
         """
         page = page_data.get("page")
         if not page:
@@ -36,20 +35,57 @@ class ContrastEngine(BaseAccessibilityEngine):
             text_elements = await self._extract_text_elements(page)
             ui_elements = await self._extract_ui_elements(page)
             issues = []
+            
             for element in text_elements:
                 issue = await self._analyze_text_contrast(element, page)
                 if issue:
                     issues.append(issue)
+            
             for element in ui_elements:
                 issue = await self._analyze_ui_contrast(element, page)
                 if issue:
                     issues.append(issue)
+                    
             hover_issues = await self._analyze_interactive_states(page)
             issues.extend(hover_issues)
+            
+            # Post-processing: Group issues into patterns
+            patterns = self._group_contrast_patterns(issues)
+            # We'll attach these to the first issue or metadata if possible
+            # But the best place is the AuditSummary which we updated
+            self._last_patterns = patterns
+            
             return issues
         except Exception as e:
             self._logger.error(f"Contrast analysis failed: {e}")
             return []
+
+    def _group_contrast_patterns(self, issues: List[UnifiedIssue]) -> List[Dict[str, Any]]:
+        """Groups contrast failures by foreground/background color combinations."""
+        groups = {}
+        for issue in issues:
+            if not issue.evidence or not issue.evidence.computed_values:
+                continue
+            
+            ev = issue.evidence.computed_values
+            # Normalizing keys for grouping
+            fg = ev.get("foreground", ev.get("component_background", "unknown"))
+            bg = ev.get("background", ev.get("surrounding_background", "unknown"))
+            key = f"{fg}_on_{bg}"
+            
+            if key not in groups:
+                groups[key] = {
+                    "pattern": f"{fg} on {bg}",
+                    "foreground": fg,
+                    "background": bg,
+                    "ratio": ev.get("ratio"),
+                    "count": 0,
+                    "sample_selector": issue.location.selector if issue.location else "unknown",
+                    "severity": issue.severity
+                }
+            groups[key]["count"] += 1
+            
+        return list(groups.values())
 
     async def _extract_text_elements(self, page: Page) -> List[Dict[str, Any]]:
         """
@@ -101,6 +137,7 @@ class ContrastEngine(BaseAccessibilityEngine):
                     isLargeText: isLargeText,
                     color: computed.color,
                     backgroundColor: computed.backgroundColor,
+                    opacity: parseFloat(computed.opacity),
                     position: {
                         top: rect.top,
                         left: rect.left,
@@ -163,6 +200,7 @@ class ContrastEngine(BaseAccessibilityEngine):
                     color: computed.color,
                     backgroundColor: computed.backgroundColor,
                     borderColor: computed.borderColor,
+                    opacity: parseFloat(computed.opacity),
                     isInteractive: true,
                     position: {
                         top: rect.top,
@@ -174,13 +212,18 @@ class ContrastEngine(BaseAccessibilityEngine):
             });
             return elements;
             function getUniqueSelector(el) {
-                if (el.id) return `#${el.id}`;
+                if (el.id) return `#${CSS.escape(el.id)}`;
                 let path = [];
                 while (el && el.nodeType === Node.ELEMENT_NODE) {
                     let selector = el.tagName.toLowerCase();
                     if (el.className) {
-                        const classes = Array.from(el.classList).join('.');
+                        const classes = Array.from(el.classList).map(c => CSS.escape(c)).join('.');
                         if (classes) selector += `.${classes}`;
+                    }
+                    const siblings = Array.from(el.parentNode ? el.parentNode.children : []).filter(c => c.tagName === el.tagName);
+                    if (siblings.length > 1) {
+                        const index = siblings.indexOf(el) + 1;
+                        selector += `:nth-child(${index})`;
                     }
                     path.unshift(selector);
                     el = el.parentNode;
@@ -197,26 +240,60 @@ class ContrastEngine(BaseAccessibilityEngine):
 
     async def _analyze_text_contrast(self, element: Dict[str, Any], page: Page) -> Optional[UnifiedIssue]:
         """
-        Calculates contrast between text foreground and background utilizing WCAG 2.0 formulas.
-        Determines the appropriate threshold dynamically based on font size and weight.
+        Calculates contrast with support for alpha blending and opacity.
         """
         fg_color = ColorParser.parse(element.get("color", ""))
         bg_color = ColorParser.parse(element.get("backgroundColor", ""))
-        if not fg_color or not bg_color: return None
-        ratio = ContrastCalculator.calculate_ratio(fg_color, bg_color)
+        
+        if not fg_color: return None
+        
+        # If background is transparent, find immediate parent background
+        if not bg_color:
+            bg_color = await self._get_surrounding_background(page, element.get("selector", ""))
+            if not bg_color: 
+                bg_color = RGBColor(255, 255, 255) # Assume white if nothing found
+        
+        # Apply element opacity to foreground alpha
+        opacity = element.get("opacity", 1.0)
+        fg_color.a *= opacity
+        
+        # Resolve alpha blending
+        effective_fg = fg_color.blend(bg_color)
+        
+        ratio = ContrastCalculator.calculate_ratio(effective_fg, bg_color)
         is_large = element.get("isLargeText", False)
         threshold = self.THRESHOLDS["large_text" if is_large else "body_text"]
+        
         if ratio >= threshold: return None
+        
         confidence_score = ConfidenceCalculator.calculate_confidence("contrast", settings.confidence_weights["contrast"])
+        
+        # Set Severity and Priority
         severity = IssueSeverity.SERIOUS
-        if ratio < threshold * 0.5: severity = IssueSeverity.CRITICAL
-        elif ratio >= threshold * 0.8: severity = IssueSeverity.MODERATE
+        
+        if ratio < 1.1: # Near invisible
+            severity = IssueSeverity.CRITICAL
+        elif ratio >= threshold * 0.8:
+            severity = IssueSeverity.MODERATE
+            
         wcag_criteria = [WCAGCriteria(id="1.4.3", level="AA", title="Contrast (Minimum)", description="Text has sufficient contrast against background")]
-        if is_large: wcag_criteria.append(WCAGCriteria(id="1.4.3", level="AA", title="Large Text Contrast", description="Large text has sufficient contrast (3:1 minimum)"))
-        remediation = RemediationSuggestion(description=f"Improve text contrast from {ratio}:1 to at least {threshold}:1", code_before=f"color: {element['color']}; background: {element['backgroundColor']};", code_after=self._suggest_color_fix(fg_color, bg_color, threshold, ratio), estimated_effort="low")
+        
+        remediation = RemediationSuggestion(
+            description=f"Improve text contrast from {ratio}:1 to at least {threshold}:1",
+            code_before=f"color: {element['color']}; background: {element['backgroundColor'] if element['backgroundColor'] != 'rgba(0, 0, 0, 0)' else 'transparent'};",
+            code_after=self._suggest_color_fix(effective_fg, bg_color, threshold, ratio),
+            estimated_effort="low",
+            estimated_fix_hours=0.5,
+            verification_steps=[
+                "Inspect the element in DevTools",
+                f"Verify contrast ratio is >= {threshold}:1 using an accessibility tool",
+                "Ensure the text is readable against all background variations"
+            ]
+        )
+        
         return UnifiedIssue(
             title=f"Low text contrast: {ratio}:1",
-            description=f"Text has insufficient contrast ratio of {ratio}:1. Minimum required is {threshold}:1 for {'large' if is_large else 'normal'} text.",
+            description=f"Text has insufficient contrast ratio of {ratio}:1 (Pattern: {effective_fg.to_rgb_string()} on {bg_color.to_rgb_string()}). Minimum required is {threshold}:1.",
             issue_type="low_contrast_text",
             severity=severity,
             confidence=ConfidenceLevel.HIGH,
@@ -227,7 +304,14 @@ class ContrastEngine(BaseAccessibilityEngine):
             actual_value=f"{ratio}:1",
             expected_value=f">={threshold}:1",
             remediation=remediation,
-            evidence=EvidenceData(computed_values={"foreground": element["color"], "background": element["backgroundColor"], "ratio": ratio, "font_size": element.get("fontSize"), "is_large_text": is_large}),
+            evidence=EvidenceData(computed_values={
+                "foreground": effective_fg.to_rgb_string(),
+                "background": bg_color.to_rgb_string(),
+                "ratio": ratio,
+                "font_size": element.get("fontSize"),
+                "is_large_text": is_large,
+                "opacity": opacity
+            }),
             engine_name=self.name,
             engine_version=self.version,
             tags=["contrast", "text", "wcag-1.4.3"]
@@ -236,12 +320,33 @@ class ContrastEngine(BaseAccessibilityEngine):
     async def _analyze_ui_contrast(self, element: Dict[str, Any], page: Page) -> Optional[UnifiedIssue]:
         bg_color = ColorParser.parse(element.get("backgroundColor", ""))
         if not bg_color: return None
+        
+        # Apply element opacity to background
+        opacity = element.get("opacity", 1.0)
+        bg_color.a *= opacity
+        
         surrounding_bg = await self._get_surrounding_background(page, element.get("selector", ""))
-        if not surrounding_bg: return None
-        ratio = ContrastCalculator.calculate_ratio(bg_color, surrounding_bg)
+        if not surrounding_bg: 
+             surrounding_bg = RGBColor(255, 255, 255)
+             
+        # Resolve alpha blending for the component background
+        effective_bg = bg_color.blend(surrounding_bg)
+             
+        ratio = ContrastCalculator.calculate_ratio(effective_bg, surrounding_bg)
         threshold = self.THRESHOLDS["ui_component"]
         if ratio >= threshold: return None
+        
         confidence_score = ConfidenceCalculator.calculate_confidence("contrast", settings.confidence_weights["contrast"])
+        
+        remediation = RemediationSuggestion(
+            description=f"Improve UI component contrast from {ratio}:1 to at least {threshold}:1",
+            estimated_fix_hours=1.0,
+            verification_steps=[
+                "Check the component's background or border color contrast against its parent container",
+                "Ensure interactive elements are clearly distinguishable from the page background"
+            ]
+        )
+        
         return UnifiedIssue(
             title=f"Low UI component contrast: {ratio}:1",
             description=f"Interactive element has insufficient contrast ratio of {ratio}:1 against its background. Minimum required for UI components is {threshold}:1.",
@@ -254,7 +359,13 @@ class ContrastEngine(BaseAccessibilityEngine):
             location=ElementLocation(selector=element.get("selector", ""), html=f"<{element['tag']}>{element.get('text', '')}</{element['tag']}>"),
             actual_value=f"{ratio}:1",
             expected_value=f">={threshold}:1",
-            evidence=EvidenceData(computed_values={"component_background": element["backgroundColor"], "surrounding_background": surrounding_bg.to_rgb_string(), "ratio": ratio}),
+            remediation=remediation,
+            evidence=EvidenceData(computed_values={
+                "component_background": effective_bg.to_rgb_string(),
+                "surrounding_background": surrounding_bg.to_rgb_string(),
+                "ratio": ratio,
+                "opacity": opacity
+            }),
             engine_name=self.name,
             engine_version=self.version,
             tags=["contrast", "ui", "wcag-1.4.11"]
@@ -263,7 +374,7 @@ class ContrastEngine(BaseAccessibilityEngine):
     async def _get_surrounding_background(self, page: Page, selector: str) -> Optional[RGBColor]:
         js_code = """
         (selector) => {
-            const el = document.querySelector(selector);
+            const el = document.querySelector(CSS.escape(selector));
             if (!el) return null;
             let parent = el.parentElement;
             while (parent) {
@@ -305,13 +416,18 @@ class ContrastEngine(BaseAccessibilityEngine):
             });
             return interactive;
             function getUniqueSelector(el) {
-                if (el.id) return `#${el.id}`;
+                if (el.id) return `#${CSS.escape(el.id)}`;
                 let path = [];
                 while (el && el.nodeType === Node.ELEMENT_NODE) {
                     let selector = el.tagName.toLowerCase();
                     if (el.className) {
-                        const classes = Array.from(el.classList).join('.');
+                        const classes = Array.from(el.classList).map(c => CSS.escape(c)).join('.');
                         if (classes) selector += `.${classes}`;
+                    }
+                    const siblings = Array.from(el.parentNode ? el.parentNode.children : []).filter(c => c.tagName === el.tagName);
+                    if (siblings.length > 1) {
+                        const index = siblings.indexOf(el) + 1;
+                        selector += `:nth-child(${index})`;
                     }
                     path.unshift(selector);
                     el = el.parentNode;
@@ -337,22 +453,23 @@ class ContrastEngine(BaseAccessibilityEngine):
             return []
 
     async def _simulate_hover_state(self, page: Page, selector: str) -> Optional[Dict[str, str]]:
-        js_code = """
-        async (selector) => {
-            const el = document.querySelector(selector);
+        delay_ms = round(settings.hover_simulation_delay * 1000)
+        js_code = f"""
+        async (selector) => {{
+            const el = document.querySelector(CSS.escape(selector));
             if (!el) return null;
             const originalTransition = el.style.transition;
             el.style.transition = 'none';
-            const hoverEvent = new MouseEvent('mouseover', {view: window, bubbles: true, cancelable: true});
+            const hoverEvent = new MouseEvent('mouseover', {{view: window, bubbles: true, cancelable: true}});
             el.dispatchEvent(hoverEvent);
-            await new Promise(resolve => setTimeout(resolve, ${Math.round(settings.hover_simulation_delay * 1000)}));
+            await new Promise(resolve => setTimeout(resolve, {delay_ms}));
             const computed = window.getComputedStyle(el);
-            const styles = {color: computed.color, backgroundColor: computed.backgroundColor};
+            const styles = {{color: computed.color, backgroundColor: computed.backgroundColor}};
             el.style.transition = originalTransition;
-            const mouseoutEvent = new MouseEvent('mouseout', {view: window, bubbles: true, cancelable: true});
+            const mouseoutEvent = new MouseEvent('mouseout', {{view: window, bubbles: true, cancelable: true}});
             el.dispatchEvent(mouseoutEvent);
             return styles;
-        }
+        }}
         """
         try:
             return await page.evaluate(js_code, selector)
@@ -381,6 +498,8 @@ class ContrastEngine(BaseAccessibilityEngine):
         )
 
     def _suggest_color_fix(self, fg: RGBColor, bg: RGBColor, target_ratio: float, current_ratio: float) -> str:
+        if current_ratio <= 0:
+            return "Adjust colors to improve contrast"
         ratio_needed = target_ratio / current_ratio
         if ratio_needed > 1.2:
             fg_luminance = fg.to_luminance()
@@ -392,16 +511,24 @@ class ContrastEngine(BaseAccessibilityEngine):
 
     def _adjust_luminance(self, fg: RGBColor, bg: RGBColor, target_ratio: float) -> RGBColor:
         bg_luminance = bg.to_luminance()
-        required_luminance = (target_ratio * (bg_luminance + 0.05)) - 0.05
-        required_luminance = max(0, min(1, required_luminance))
         current_luminance = fg.to_luminance()
-        if required_luminance > current_luminance:
-            factor = min(1, required_luminance / current_luminance)
-            r = min(255, int(fg.r * (1 + factor) / 2))
-            g = min(255, int(fg.g * (1 + factor) / 2))
-            b = min(255, int(fg.b * (1 + factor) / 2))
+        
+        if bg_luminance < current_luminance:
+            required_luminance = (target_ratio * (bg_luminance + 0.05)) - 0.05
         else:
-            factor = required_luminance / current_luminance
+            required_luminance = (bg_luminance + 0.05) / target_ratio - 0.05
+            
+        required_luminance = max(0, min(1, required_luminance))
+        
+        if required_luminance > current_luminance:
+            safe_current = max(0.01, current_luminance)
+            factor = required_luminance / safe_current
+            r = min(255, int(fg.r * factor))
+            g = min(255, int(fg.g * factor))
+            b = min(255, int(fg.b * factor))
+        else:
+            safe_current = max(0.01, current_luminance)
+            factor = required_luminance / safe_current
             r = int(fg.r * factor)
             g = int(fg.g * factor)
             b = int(fg.b * factor)

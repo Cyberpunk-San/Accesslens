@@ -1,6 +1,8 @@
 # tests/test_rate_limit_units.py
 
 import pytest
+pytestmark = pytest.mark.unit
+
 from fastapi import Request
 from app.middleware.rate_limit import RateLimiter
 import asyncio
@@ -29,9 +31,9 @@ class TestRateLimiterUnits:
 
     def test_get_endpoint_limit_patterns(self, limiter):
         assert limiter._get_endpoint_limit("/health") == 300
-        assert limiter._get_endpoint_limit("/api/v1/audit/123/status") == 60
+        assert limiter._get_endpoint_limit("/api/v1/audit/123/status") == 120  # status checks: bumped 60→120
         assert limiter._get_endpoint_limit("/api/v1/unknown") == 10
-        assert limiter._get_endpoint_limit("/api/v1/audit") == 20
+        assert limiter._get_endpoint_limit("/api/v1/audit") == 60  # audit creates: bumped 20→60
 
     @pytest.mark.asyncio
     async def test_cleanup_entries(self, limiter):

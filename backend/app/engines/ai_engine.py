@@ -1,12 +1,11 @@
 from typing import List, Dict, Any, Optional
 import asyncio
 import logging
-import torch
 from ..engines.base import BaseAccessibilityEngine
 from ..models.schemas import (
     UnifiedIssue, AuditRequest, IssueSource,
     ConfidenceLevel, RemediationSuggestion, EvidenceData,
-    WCAGCriteria, IssueSeverity
+    WCAGCriteria, IssueSeverity, ElementLocation
 )
 from ..ai.llava_integration import LLaVAService
 from ..ai.mistral_integration import MistralService
@@ -53,19 +52,23 @@ class AIEngine(BaseAccessibilityEngine):
             screenshot = page_data.get("screenshot")
             accessibility_tree = page_data.get("accessibility_tree", {})
             dom_snapshot = page_data.get("dom_snapshot", {})
-            if not screenshot:
-                self._logger.error("No screenshot available for AI analysis")
-                return self._create_error_issues("Screenshot missing")
-            vision_issues = await self._run_vision_analysis(screenshot, accessibility_tree, dom_snapshot)
-            issues.extend(vision_issues)
-            if issues: await self._generate_code_fixes(issues, dom_snapshot)
-            contextual_issues = await self._run_contextual_analysis(accessibility_tree, dom_snapshot)
+            page = page_data.get("page")
+
+            # 1. Vision Analysis (Requires Screenshot)
+            if screenshot:
+                vision_issues = await self._run_vision_analysis(screenshot, accessibility_tree, dom_snapshot)
+                issues.extend(vision_issues)
+                if issues: await self._generate_code_fixes(issues, dom_snapshot)
+            else:
+                self._logger.info("No screenshot available; skipping vision analysis")
+
+            # 2. Contextual Analysis (Heuristics & Textual)
+            contextual_issues = await self._run_contextual_analysis(accessibility_tree, dom_snapshot, page)
             issues.extend(contextual_issues)
-            for issue in issues:
-                issue.source = IssueSource.AI_CONTEXTUAL
-                if not issue.confidence:
-                    issue.confidence = ConfidenceLevel.MEDIUM
-                    issue.confidence_score = settings.ai_default_score
+
+            # 3. Handle Self-Doubt / Hallucination Filtering
+            issues = self._apply_self_doubt_filter(issues)
+
             return issues
         except Exception as e:
             self._logger.error(f"AI analysis failed: {e}")
@@ -140,7 +143,7 @@ class AIEngine(BaseAccessibilityEngine):
         except Exception as e:
             self._logger.error(f"Code generation failed: {e}")
 
-    async def _run_contextual_analysis(self, accessibility_tree: Dict, dom_snapshot: Dict) -> List[UnifiedIssue]:
+    async def _run_contextual_analysis(self, accessibility_tree: Dict, dom_snapshot: Dict, page: Optional[Any] = None) -> List[UnifiedIssue]:
         """
         Evaluates heuristic thresholds for UX and accessibility context.
         
@@ -150,7 +153,7 @@ class AIEngine(BaseAccessibilityEngine):
         """
         issues = []
         try:
-            alt_issues = await self._analyze_alt_text_quality(accessibility_tree)
+            alt_issues = await self._analyze_alt_text_quality(accessibility_tree, page)
             issues.extend(alt_issues)
             layout_issues = await self._analyze_layout_complexity(dom_snapshot)
             issues.extend(layout_issues)
@@ -173,13 +176,15 @@ class AIEngine(BaseAccessibilityEngine):
         findings = results.get("findings", [])
         for finding in findings:
             severity_map = {"critical": IssueSeverity.CRITICAL, "serious": IssueSeverity.SERIOUS, "moderate": IssueSeverity.MODERATE, "minor": IssueSeverity.MINOR}
+            confidence_score = int(finding.get("confidence", 0.85) * 100)
+            confidence = self._get_confidence_level(confidence_score)
             issue = UnifiedIssue(
                 title=f"[Vision] {finding.get('description', '')[:100]}",
                 description=finding.get("description", ""),
                 issue_type=f"vision_{finding.get('issue_type', 'unknown')}",
                 severity=severity_map.get(finding.get("severity", "moderate"), IssueSeverity.MODERATE),
-                confidence=ConfidenceLevel.MEDIUM,
-                confidence_score=int(finding.get("confidence", 0.85) * 100),
+                confidence=confidence,
+                confidence_score=confidence_score,
                 source=IssueSource.AI_CONTEXTUAL,
                 remediation=RemediationSuggestion(description=finding.get("suggestion", "Review this element"), estimated_effort="medium"),
                 engine_name=self.name,
@@ -192,32 +197,95 @@ class AIEngine(BaseAccessibilityEngine):
     def _parse_fix_result(self, result: Dict, selector: Optional[str]) -> RemediationSuggestion:
         return RemediationSuggestion(description=result.get("explanation", "Suggested accessibility fix"), code_before=result.get("code_before", ""), code_after=result.get("code_after", ""), estimated_effort="medium")
 
-    async def _analyze_alt_text_quality(self, accessibility_tree: Dict) -> List[UnifiedIssue]:
+    async def _analyze_alt_text_quality(self, accessibility_tree: Dict, page: Optional[Any] = None) -> List[UnifiedIssue]:
         issues = []
-        focusable_elements = accessibility_tree.get('structure', {}).get('focusable_elements', [])
-        
+        if page:
+            js_code = """
+            () => {
+                const results = [];
+                const images = Array.from(document.querySelectorAll('img'));
+                images.forEach(img => {
+                    const alt = img.getAttribute('alt');
+                    const src = img.getAttribute('src') || '';
+                    const isVisible = img.offsetWidth > 0 && img.offsetHeight > 0;
+                    
+                    results.push({
+                        alt: alt,
+                        src: src.substring(src.lastIndexOf('/') + 1),
+                        selector: img.id ? '#' + img.id : 'img',
+                        html: img.outerHTML.substring(0, 100),
+                        visible: isVisible
+                    });
+                });
+                return results;
+            }
+            """
+            try:
+                findings = await page.evaluate(js_code)
+                vague_alts = ['image', 'picture', 'icon', 'graphic', 'photo', 'drdo', 'logo']
+                
+                for f in findings:
+                    alt = f['alt']
+                    if alt is None:
+                        # Missing alt attribute
+                        issues.append(UnifiedIssue(
+                            title="Missing alt attribute on image",
+                            description="Image lacks an 'alt' attribute. Screen readers may announce the filename instead, which is often not helpful.",
+                            issue_type="missing_alt",
+                            severity=IssueSeverity.SERIOUS,
+                            confidence=ConfidenceLevel.HIGH,
+                            confidence_score=100,
+                            source=IssueSource.AI_CONTEXTUAL,
+                            wcag_criteria=[WCAGCriteria(id="1.1.1", level="A", title="Non-text Content")],
+                            location=ElementLocation(selector=f['selector'], html=f['html']),
+                            engine_name=self.name,
+                            tags=["images", "alt-text"] + (["hidden"] if not f['visible'] else [])
+                        ))
+                    elif alt.strip() == "":
+                        # Empty alt attribute - usually okay for decorative, but AI can flag if it seems important
+                        pass
+                    elif alt.lower().strip() in vague_alts or len(alt.strip()) < 5:
+                        # Non-descriptive or redundant alt text
+                        issues.append(UnifiedIssue(
+                            title="Non-descriptive or redundant alt text",
+                            description=f"The alt text '{alt}' for this image is likely not descriptive enough or is redundant (e.g., just the organization name).",
+                            issue_type="vague_alt_text",
+                            severity=IssueSeverity.MODERATE,
+                            confidence=ConfidenceLevel.MEDIUM,
+                            confidence_score=75,
+                            source=IssueSource.AI_CONTEXTUAL,
+                            wcag_criteria=[WCAGCriteria(id="1.1.1", level="A", title="Non-text Content")],
+                            location=ElementLocation(selector=f['selector'], html=f['html']),
+                            remediation=RemediationSuggestion(
+                                description="Provide a brief, meaningful description of the image content or its purpose.",
+                                estimated_effort="Low"
+                            ),
+                            engine_name=self.name,
+                            tags=["images", "alt-text", "quality"] + (["hidden"] if not f['visible'] else [])
+                        ))
+            except Exception as e:
+                self._logger.warning(f"Failed to analyze alt text quality: {e}")
+
+        # Also keep focusable check for links/buttons
+        focusable = accessibility_tree.get('structure', {}).get('focusable_elements', [])
         vague_phrases = ['click here', 'read more', 'learn more', 'link', 'continue', 'here']
-        
-        for element in focusable_elements:
+        for element in focusable:
             role = element.get('role', '').lower()
             name = element.get('name', '').lower().strip()
-            
             if role in ['link', 'button']:
-                # Check for empty or whitespace-only names
                 if not name:
                     issues.append(UnifiedIssue(
                         title=f"Empty {role} found",
-                        description=f"A {role} was found without any accessible text.",
-                        issue_type="empty_interactive_element",
+                        description=f"This {role} element has no text content or accessible name, making it unusable for screen reader users.",
+                        issue_type=f"empty_{role}",
                         severity=IssueSeverity.SERIOUS,
                         confidence=ConfidenceLevel.HIGH,
-                        confidence_score=95,
+                        confidence_score=100,
                         source=IssueSource.AI_CONTEXTUAL,
-                        wcag_criteria=[WCAGCriteria(id="4.1.2", level="A", title="Name, Role, Value")],
+                        wcag_criteria=[WCAGCriteria(id="2.4.4", level="A", title="Link Purpose (In Context)")],
                         engine_name=self.name,
-                        tags=["ai", "semantics"]
+                        tags=["ai", "semantics", "empty"]
                     ))
-                # Check for vague phrases
                 elif name in vague_phrases:
                     issues.append(UnifiedIssue(
                         title="Vague link or button text",
@@ -225,7 +293,7 @@ class AIEngine(BaseAccessibilityEngine):
                         issue_type="vague_link_text",
                         severity=IssueSeverity.MODERATE,
                         confidence=ConfidenceLevel.HIGH,
-                        confidence_score=90,
+                        confidence_score=95,
                         source=IssueSource.AI_CONTEXTUAL,
                         wcag_criteria=[WCAGCriteria(id="2.4.4", level="A", title="Link Purpose (In Context)")],
                         engine_name=self.name,
@@ -248,6 +316,54 @@ class AIEngine(BaseAccessibilityEngine):
         if len(focusable) > settings.max_focusable_elements:
             return [UnifiedIssue(title="Verify focus indicators", description="Many interactive elements found", issue_type="focus_visibility_check", severity=IssueSeverity.SERIOUS, confidence=ConfidenceLevel.LOW, confidence_score=60, source=IssueSource.AI_CONTEXTUAL, wcag_criteria=[WCAGCriteria(id="2.4.7", level="AA", title="Focus Visible")], engine_name=self.name, tags=["ai", "keyboard"])]
         return []
+
+    def _apply_self_doubt_filter(self, issues: List[UnifiedIssue]) -> List[UnifiedIssue]:
+        """
+        Filters out hallucinations, duplicate findings, and conflicting AI outputs.
+        """
+        filtered = []
+        seen_titles = set()
+        
+        for issue in issues:
+            # 1. Validation for malformed content
+            if not issue.title or len(issue.description or "") < 10:
+                self._logger.debug(f"Filtering malformed AI issue: {issue.title}")
+                continue
+                
+            # 2. De-duplication
+            title_key = issue.title.lower().strip()
+            if title_key in seen_titles:
+                continue
+            seen_titles.add(title_key)
+            
+            # 3. Conflict detection (e.g. AI saying "Perfect" while finding issues)
+            # (Handled by checking if "no issues" or similar phrases coexist with actual issues)
+            
+            # 4. Global Priority & Remediation defaults for AI
+            from ..models.schemas import TaskPriority, RemediationSuggestion
+            issue.source = IssueSource.AI_CONTEXTUAL
+            if not issue.priority:
+                issue.priority = TaskPriority.P2
+            
+            if not issue.remediation:
+                issue.remediation = RemediationSuggestion(
+                    description="AI analysis requires manual review for specific remediation.",
+                    estimated_effort="medium"
+                )
+                
+            if not issue.remediation.estimated_fix_hours:
+                issue.remediation.estimated_fix_hours = 1.0
+            if not issue.remediation.verification_steps:
+               issue.remediation.verification_steps = ["Manual verification required for AI findings"]
+            
+            filtered.append(issue)
+            
+        return filtered
+
+    def _get_confidence_level(self, score: float) -> ConfidenceLevel:
+        if score >= 95: return ConfidenceLevel.HIGH
+        if score >= 70: return ConfidenceLevel.MEDIUM
+        return ConfidenceLevel.LOW
 
     def _create_error_issues(self, error: str) -> List[UnifiedIssue]:
         return [UnifiedIssue(title="AI analysis error", description=error, issue_type="ai_service_error", severity=IssueSeverity.MINOR, confidence=ConfidenceLevel.HIGH, confidence_score=100, source=IssueSource.AI_CONTEXTUAL, engine_name=self.name, tags=["ai", "error"])]

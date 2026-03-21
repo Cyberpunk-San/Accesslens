@@ -1,11 +1,14 @@
 import { useEffect, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuditStore } from '../store/useAuditStore';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from './use-audits';
 
 let socket: Socket | null = null;
 
 export const useSocket = () => {
-  const { setActiveAudit, pollAuditStatus } = useAuditStore();
+  const { setActiveAudit } = useAuditStore();
+  const queryClient = useQueryClient();
 
   const connect = useCallback(() => {
     if (socket?.connected) return;
@@ -27,13 +30,16 @@ export const useSocket = () => {
 
     socket.on('audit_completed', (data) => {
       console.log('Audit Completed:', data);
-      pollAuditStatus(data.audit_id);
+      // Invalidate both the list and the specific audit detail
+      queryClient.invalidateQueries({ queryKey: queryKeys.audits });
+      queryClient.invalidateQueries({ queryKey: queryKeys.audit(data.audit_id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.status(data.audit_id) });
     });
 
     socket.on('disconnect', () => {
       console.log('WebSocket Disconnected');
     });
-  }, [setActiveAudit, pollAuditStatus]);
+  }, [setActiveAudit, queryClient]);
 
   const disconnect = useCallback(() => {
     if (socket) {

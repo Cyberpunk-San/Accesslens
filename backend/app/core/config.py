@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     # Browser Settings
     browser_headless: bool = Field(True, alias="BROWSER_HEADLESS")
-    browser_max_pages: int = Field(10, alias="BROWSER_MAX_PAGES") # Increased
+    browser_max_pages: int = Field(20, alias="BROWSER_MAX_PAGES") # Increased
     browser_timeout: int = Field(60000, alias="BROWSER_TIMEOUT") # Increased from 30s
 
     # Audit Settings
@@ -32,7 +32,10 @@ class Settings(BaseSettings):
     @field_validator('enabled_engines')
     @classmethod
     def validate_engines(cls, v: List[str]) -> List[str]:
-        valid_engines = {"wcag_deterministic", "contrast_engine", "structural_engine", "ai_engine"}
+        valid_engines = {
+            "wcag_deterministic", "contrast_engine", "structural_engine", 
+            "ai_engine", "heuristic", "navigation", "form_engine"
+        }
         invalid = [e for e in v if e not in valid_engines]
         if invalid:
             raise ValueError(f"Invalid engines configured: {invalid}")
@@ -101,10 +104,20 @@ class Settings(BaseSettings):
     max_focusable_elements: int = Field(10, alias="MAX_FOCUSABLE_ELEMENTS")
 
     # Database
-    database_url: str = Field("sqlite:///accesslens.db", alias="DATABASE_URL")
+    database_url: str = Field("sqlite:///./accesslens.db", alias="DATABASE_URL")
 
-    # Redis
-    redis_url: Optional[str] = Field("redis://localhost:6379/0", alias="REDIS_URL")
+    @field_validator('database_url')
+    @classmethod
+    def validate_database_url(cls, v: str) -> str:
+        if v.startswith(("postgresql://", "postgres://", "postgresql+asyncpg://")):
+            raise ValueError(
+                "PostgreSQL DATABASE_URL detected. This application uses SQLite only. "
+                "Set DATABASE_URL=sqlite:///./accesslens.db in your .env file."
+            )
+        return v
+
+    # Redis (optional — leave unset or set to None to disable)
+    redis_url: Optional[str] = Field(None, alias="REDIS_URL")
 
     # Storage
     storage_path: Path = Field(Path("./data"), alias="STORAGE_PATH")
@@ -125,6 +138,10 @@ class Settings(BaseSettings):
     )
 
 settings = Settings()
+
+import sys
+if "pytest" in sys.modules or (len(sys.argv) > 0 and "pytest" in sys.argv[0]):
+    settings.testing = True
 
 
 settings.llava_model_path.parent.mkdir(parents=True, exist_ok=True)

@@ -13,12 +13,14 @@ from typing import Dict, Any, List
 from .api.routes import router
 from .core.browser_manager import browser_manager
 from .core.report_storage import report_storage
+from .core.config import settings
 from .middleware import RateLimitMiddleware, rate_limiter
 from .engines.registry import EngineRegistry
 from .engines.wcag_engine import WCAGEngine
 from .engines.contrast_engine import ContrastEngine
 from .engines.structural_engine import StructuralEngine
 from .core.logging_config import setup_logging
+from .utils.cache import cache_manager
 
 
 setup_logging()
@@ -32,10 +34,12 @@ async def lifespan(app: FastAPI):
     Handles startup and shutdown events.
     """
 
-    logger.info("Starting AccessLens API...")
+    # Initialize cache manager (must happen before routes handle requests)
+    await cache_manager.initialize()
+    logger.info("Cache manager initialized")
 
     # Initialize browser manager
-    await browser_manager.initialize(headless=True)
+    await browser_manager.initialize(headless=settings.browser_headless)
     logger.info("Browser manager initialized")
 
     # Initialize rate limiter cleanup task
@@ -44,27 +48,10 @@ async def lifespan(app: FastAPI):
 
     # Initialize report storage
     await report_storage.initialize()
-    app.state.report_storage = report_storage
     logger.info("Report storage initialized")
 
-    # Initialize engine registry
-    app.state.engine_registry = EngineRegistry()
-
-    # Register engines
-    wcag = WCAGEngine()
-    contrast = ContrastEngine()
-    structural = StructuralEngine()
-    
-    app.state.engine_registry.register(wcag)
-    app.state.engine_registry.register(contrast)
-    app.state.engine_registry.register(structural)
-    
-    # Register aliases to prevent "Engine not found" warnings
-    app.state.engine_registry._engines["wcag"] = wcag
-    app.state.engine_registry._engines["contrast"] = contrast
-    app.state.engine_registry._engines["structural"] = structural
-
-    logger.info(f"Registered {len(app.state.engine_registry.get_all())} engines (with aliases)")
+    # Engines are pre-registered at top level, but we log here
+    logger.info(f"Registered {len(app.state.engine_registry._engines)} engines (with aliases)")
 
     yield
 
@@ -73,6 +60,7 @@ async def lifespan(app: FastAPI):
     await browser_manager.close()
     await rate_limiter.shutdown()
     await report_storage.close()
+    await cache_manager.clear()
     logger.info("Cleanup complete")
 
 
@@ -83,13 +71,40 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Initialize app state attributes early so they are available even without lifespan (useful for tests)
+app.state.report_storage = report_storage
+app.state.engine_registry = EngineRegistry()
+
+# Pre-register engines so they are available for metadata/listing immediately
+from .engines.wcag_engine import WCAGEngine
+from .engines.structural_engine import StructuralEngine
+from .engines.contrast_engine import ContrastEngine
+from .engines.heuristic_engine import HeuristicEngine
+from .engines.navigation_engine import NavigationEngine
+from .engines.form_engine import FormEngine
+
+app.state.engine_registry.register(WCAGEngine())
+app.state.engine_registry.register(StructuralEngine())
+app.state.engine_registry.register(ContrastEngine())
+app.state.engine_registry.register(HeuristicEngine())
+app.state.engine_registry.register(NavigationEngine())
+app.state.engine_registry.register(FormEngine())
+
+# Aliases
+app.state.engine_registry._engines["wcag"] = app.state.engine_registry.get("wcag_deterministic")
+app.state.engine_registry._engines["structural"] = app.state.engine_registry.get("structural_engine")
+app.state.engine_registry._engines["contrast"] = app.state.engine_registry.get("contrast_engine")
+app.state.engine_registry._engines["heuristic"] = app.state.engine_registry.get("heuristic")
+app.state.engine_registry._engines["navigation"] = app.state.engine_registry.get("navigation")
+app.state.engine_registry._engines["form"] = app.state.engine_registry.get("form_engine")
+
 # Add rate limiting middleware FIRST (before CORS and other middleware)
 app.add_middleware(RateLimitMiddleware)
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[o.strip() for o in settings.cors_origins.split(",")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

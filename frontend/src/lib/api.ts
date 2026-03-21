@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { 
-  AuditReport, 
+  AuditReport,
+  AuditRecord,
   Engine, 
   StartAuditResponse, 
   AuditStatusResponse,
@@ -61,7 +62,7 @@ export const auditService = {
   startAudit: async (request: AuditRequest): Promise<StartAuditResponse> => {
     const response = await apiClient.post('/audit', {
       url: request.url,
-      engines: request.engines || ['wcag_deterministic', 'structural_engine', 'contrast_engine'],
+      engines: request.engines || [],
       enable_ai: request.enable_ai || false,
       depth: request.depth || 'standard',
       viewport: request.viewport || { width: 1280, height: 720 },
@@ -89,7 +90,7 @@ export const auditService = {
   },
 
   // List recent audits
-  listAudits: async (limit: number = 20, offset: number = 0): Promise<AuditReport[]> => {
+  listAudits: async (limit: number = 20, offset: number = 0): Promise<AuditRecord[]> => {
     const response = await apiClient.get('/audit', {
       params: { limit, offset }
     });

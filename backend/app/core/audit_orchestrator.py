@@ -28,66 +28,69 @@ class AuditOrchestrator:
     async def run_audit(self, request: AuditRequest) -> AuditReport:
 
         start_time = time.time()
+        page = None
 
         self._logger.info(f"Starting audit for {request.url}")
 
+        try:
+            page_data = await self._setup_page(request)
+            page = page_data.get("page")
 
-        page_data = await self._setup_page(request)
+            if "error" in page_data:
+                return self._create_error_report(request, page_data["error"])
 
-        if "error" in page_data:
-            return self._create_error_report(request, page_data["error"])
-
-
-        engine_tasks = []
-        for engine_name in request.engines:
-            engine = self.engine_registry.get(engine_name)
-            if engine:
-                engine_tasks.append(
-                    self._run_engine_safe(engine, page_data, request)
-                )
-            else:
-                self._logger.warning(f"Engine {engine_name} not found")
-
-
-        engine_results = await asyncio.gather(*engine_tasks, return_exceptions=True)
+            engine_tasks = []
+            for engine_name in request.engines:
+                engine = self.engine_registry.get(engine_name)
+                if engine:
+                    engine_tasks.append(
+                        self._run_engine_safe(engine, page_data, request)
+                    )
+                else:
+                    self._logger.debug(f"Engine '{engine_name}' not found in registry — skipping")
 
 
-        all_issues = []
-        for result in engine_results:
-            if isinstance(result, Exception):
-                self._logger.error(f"Engine failed: {result}")
-            elif isinstance(result, list):
-                all_issues.extend(result)
+            engine_results = await asyncio.gather(*engine_tasks, return_exceptions=True)
 
 
-        if request.enable_ai and settings.enable_ai_engine:
-            ai_issues = await self._run_ai_analysis(page_data, request)
-            all_issues.extend(ai_issues)
+            all_issues = []
+            for result in engine_results:
+                if isinstance(result, Exception):
+                    self._logger.error(f"Engine failed: {result}")
+                elif isinstance(result, list):
+                    all_issues.extend(result)
 
 
-        summary = self._generate_summary(all_issues, start_time)
+            if request.enable_ai and settings.enable_ai_engine:
+                ai_issues = await self._run_ai_analysis(page_data, request)
+                all_issues.extend(ai_issues)
 
 
-        report = AuditReport(
-            request=request,
-            summary=summary,
-            issues=all_issues,
-            accessibility_tree=page_data.get("accessibility_tree"),
-            metadata={
-                "duration_seconds": round(time.time() - start_time, 2),
-                "engines_run": request.engines,
-                "full_screenshot": page_data.get("screenshot")
-            }
-        )
+            summary = self._generate_summary(all_issues, start_time)
 
-        self._logger.info(f"Audit complete: {summary.total_issues} issues found")
 
-        return report
+            report = AuditReport(
+                request=request,
+                summary=summary,
+                issues=all_issues,
+                accessibility_tree=page_data.get("accessibility_tree"),
+                metadata={
+                    "duration_seconds": round(time.time() - start_time, 2),
+                    "engines_run": request.engines,
+                    "full_screenshot": page_data.get("screenshot")
+                }
+            )
+
+            self._logger.info(f"Audit complete: {summary.total_issues} issues found")
+            return report
+
+        finally:
+            if page:
+                await browser_manager.release_page(page)
 
     async def _setup_page(self, request: AuditRequest) -> Dict[str, Any]:
 
         try:
-
             page_data = await self.page_controller.navigate_and_extract(
                 request.url,
                 {
@@ -97,7 +100,8 @@ class AuditOrchestrator:
                 }
             )
 
-
+            # Important: Attach the live page object so engines can perform real analysis
+            # PageController no longer releases the page in its finally block.
             if self.page_controller._current_page:
                 page_data["page"] = self.page_controller._current_page
 
@@ -105,8 +109,6 @@ class AuditOrchestrator:
 
         except Exception as e:
             self._logger.error(f"Page setup failed for {request.url}: {e}")
-            if "different event loop" in str(e):
-                self._logger.warning("Event loop mismatch detected, browser_manager lock will be re-initialized on next call.")
             return {"error": f"Failed to load page: {str(e)}"}
         finally:
 
@@ -121,7 +123,9 @@ class AuditOrchestrator:
 
         try:
             self._logger.debug(f"Running engine: {engine.name}")
-            issues = await engine.analyze(page_data, request.dict())
+            # Fix: Pass the request object directly, not as a dictionary
+            # Engines like WCAGEngine expect the AuditRequest object for typing.
+            issues = await engine.analyze(page_data, request)
             self._logger.debug(f"Engine {engine.name} found {len(issues)} issues")
             return issues
         except Exception as e:
@@ -133,10 +137,23 @@ class AuditOrchestrator:
         page_data: Dict[str, Any],
         request: AuditRequest
     ) -> List[UnifiedIssue]:
-
-
-
-        return []
+        """Call AIService for vision + fix generation. Silently skips if models aren't available."""
+        try:
+            from ..ai.ai_service import AIService, AIConfig
+            ai_service = AIService(AIConfig(
+                llava_endpoint=settings.llava_endpoint,
+                mistral_endpoint=settings.mistral_endpoint,
+                use_local=settings.ai_use_local,
+                confidence_threshold=settings.ai_confidence_threshold
+            ))
+            return await ai_service.analyze(
+                screenshot=page_data.get("screenshot", ""),
+                dom_snapshot=page_data.get("accessibility_tree", {}),
+                existing_issues=[]
+            )
+        except Exception as e:
+            self._logger.debug(f"AI analysis skipped (models likely not running): {e}")
+            return []
 
     def _generate_summary(
         self,
@@ -155,26 +172,34 @@ class AuditOrchestrator:
             by_source[issue.source] = by_source.get(issue.source, 0) + 1
             total_confidence += issue.confidence_score
 
-
             for wcag in issue.wcag_criteria:
                 by_wcag_level[wcag.level] = by_wcag_level.get(wcag.level, 0) + 1
 
-
-
+        # --- Improved scoring formula ---
+        # Deduct per unique issue TYPE (not per instance) to avoid score=0 on large sites.
+        # Weight each deduction by the issue's confidence so low-confidence guesses hurt less.
         if issues:
             severity_weights = {
-                IssueSeverity.CRITICAL: 25,
-                IssueSeverity.SERIOUS: 10,
-                IssueSeverity.MODERATE: 5,
-                IssueSeverity.MINOR: 2
+                IssueSeverity.CRITICAL: 20,
+                IssueSeverity.SERIOUS:  10,
+                IssueSeverity.MODERATE:  5,
+                IssueSeverity.MINOR:     2
             }
 
-            total_deduction = sum(
-                severity_weights.get(issue.severity, 2)
-                for issue in issues
-            )
-            
-            score = max(0, 100 - total_deduction)
+            # Group by (severity, issue_type) and deduct only once per unique violation type.
+            seen_types: set = set()
+            total_deduction = 0.0
+            for issue in sorted(issues, key=lambda i: severity_weights.get(i.severity, 2), reverse=True):
+                key = (issue.severity, issue.issue_type)
+                if key not in seen_types:
+                    seen_types.add(key)
+                    weight = severity_weights.get(issue.severity, 2)
+                    # Scale deduction by confidence (0–1 range)
+                    confidence_factor = issue.confidence_score / 100.0
+                    total_deduction += weight * confidence_factor
+
+            # Cap total deduction at 70 so even very broken pages still show a non-zero score
+            score = max(0, 100 - min(70, total_deduction))
         else:
             score = 100
 
@@ -182,12 +207,18 @@ class AuditOrchestrator:
 
         axe_issues = [i for i in issues if i.source == IssueSource.WCAG_DETERMINISTIC]
         advanced_issues = [i for i in issues if i.source != IssueSource.WCAG_DETERMINISTIC]
-        
+
         coverage_comparator = {
             "axe_only_found": len(axe_issues),
             "advanced_found": len(advanced_issues),
             "axe_coverage_percent": round(len(axe_issues) / len(issues) * 100, 2) if issues else 100
         }
+
+        # Extract contrast patterns from ContrastEngine if it ran
+        contrast_patterns = []
+        contrast_engine = self.engine_registry.get("contrast_engine")
+        if contrast_engine and hasattr(contrast_engine, "_last_patterns"):
+            contrast_patterns = contrast_engine._last_patterns
 
         return AuditSummary(
             total_issues=len(issues),
@@ -196,7 +227,8 @@ class AuditOrchestrator:
             by_wcag_level=by_wcag_level,
             score=round(score, 2),
             confidence_avg=round(avg_confidence, 2),
-            coverage_comparator=coverage_comparator
+            coverage_comparator=coverage_comparator,
+            contrast_patterns=contrast_patterns
         )
 
     def _create_error_report(self, request: AuditRequest, error: str) -> AuditReport:

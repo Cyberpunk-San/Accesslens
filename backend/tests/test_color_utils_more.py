@@ -1,6 +1,8 @@
 # tests/test_color_utils_more.py
 
 import pytest
+pytestmark = pytest.mark.unit
+
 from app.core.color_utils import ColorParser, RGBColor, ContrastCalculator
 
 class TestColorUtilsCoverage:
@@ -39,7 +41,7 @@ class TestColorUtilsCoverage:
     def test_color_parser_rgb_edge_cases(self):
         """Test RGB color edge cases"""
         assert ColorParser.parse("rgb(255,255,255)") == RGBColor(255, 255, 255)
-        assert ColorParser.parse("rgba(255,0,0,0.5)") == RGBColor(255, 0, 0)
+        assert ColorParser.parse("rgba(255,0,0,0.5)") == RGBColor(255, 0, 0, 0.5)
         assert ColorParser.parse("rgb(300,0,0)") is None  # Out of range
     
     def test_contrast_calculator_edge_cases(self):

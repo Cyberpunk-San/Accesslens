@@ -2,6 +2,8 @@
 
 
 import pytest
+pytestmark = pytest.mark.browser
+
 from httpx import AsyncClient, ASGITransport
 from app.main import app
 import asyncio

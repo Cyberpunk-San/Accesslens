@@ -1,6 +1,8 @@
 # tests/test_helpers_coverage.py
 
 import pytest
+pytestmark = pytest.mark.unit
+import asyncio
 from app.utils.helpers import (
     generate_selector, extract_domain, normalize_url,
     format_duration, truncate_text, safe_json_parse,

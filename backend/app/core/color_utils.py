@@ -6,18 +6,31 @@ from dataclasses import dataclass
 
 @dataclass
 class RGBColor:
-
     r: int
     g: int
     b: int
+    a: float = 1.0
 
     def to_hex(self) -> str:
 
         return f"#{self.r:02x}{self.g:02x}{self.b:02x}"
 
     def to_rgb_string(self) -> str:
-
+        if self.a < 1.0:
+            return f"rgba({self.r}, {self.g}, {self.b}, {self.a})"
         return f"rgb({self.r}, {self.g}, {self.b})"
+
+    def blend(self, background: 'RGBColor') -> 'RGBColor':
+        """Blends this color with a background color using alpha channel."""
+        if self.a >= 1.0:
+            return self
+        alpha = self.a
+        return RGBColor(
+            r=int(self.r * alpha + background.r * (1 - alpha)),
+            g=int(self.g * alpha + background.g * (1 - alpha)),
+            b=int(self.b * alpha + background.b * (1 - alpha)),
+            a=1.0
+        )
 
     def to_luminance(self) -> float:
 
@@ -65,15 +78,15 @@ class ColorParser:
 
     @staticmethod
     def _parse_rgb(rgb_str: str) -> Optional[RGBColor]:
-
-
-        pattern = r'rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)'
+        # Handle both rgb and rgba
+        pattern = r'rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)'
         match = re.match(pattern, rgb_str.strip())
 
         if match:
             r, g, b = int(match.group(1)), int(match.group(2)), int(match.group(3))
-            if all(0 <= c <= 255 for c in (r, g, b)):
-                return RGBColor(r=r, g=g, b=b)
+            a = float(match.group(4)) if match.group(4) else 1.0
+            if all(0 <= c <= 255 for c in (r, g, b)) and 0 <= a <= 1:
+                return RGBColor(r=r, g=g, b=b, a=a)
         return None
 
     @staticmethod
@@ -109,7 +122,7 @@ class ColorParser:
         h = int(match.group(1)) / 360
         s = int(match.group(2)) / 100
         l = int(match.group(3)) / 100
-
+        a = float(match.group(4)) if match.group(4) else 1.0
 
         if s == 0:
             r = g = b = l
@@ -132,7 +145,8 @@ class ColorParser:
         return RGBColor(
             r=int(round(r * 255)),
             g=int(round(g * 255)),
-            b=int(round(b * 255))
+            b=int(round(b * 255)),
+            a=a
         )
 
 

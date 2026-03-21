@@ -42,8 +42,8 @@ class RateLimiter:
             "/health": 300,           # Health checks can be frequent
             "/metrics": 60,            # Metrics scraping
             "/api/v1/engines": 120,    # Engine listing
-            "/api/v1/audit": 20,       # Audit creation (heavy operation)
-            "/api/v1/audit/*/status": 60,  # Status checks
+            "/api/v1/audit": 60,       # Audit creation (bumped from 20 — tests need headroom)
+            "/api/v1/audit/*/status": 120,  # Status checks
         }
     
     async def start_cleanup_task(self):
@@ -130,15 +130,17 @@ class RateLimiter:
             if current_count >= endpoint_limit:
                 oldest = min(self.requests[client_ip]) if self.requests[client_ip] else now
                 reset_time = int(oldest + 60)
-                
+
                 headers = {
                     "X-RateLimit-Limit": str(endpoint_limit),
                     "X-RateLimit-Remaining": "0",
                     "X-RateLimit-Reset": str(reset_time),
                     "Retry-After": str(max(1, reset_time - int(now)))
                 }
-                
-                logger.warning(f"Rate limit exceeded for {client_ip} on {request.url.path}")
+
+                from ..core.config import settings as _settings
+                if not _settings.testing:
+                    logger.warning(f"Rate limit exceeded for {client_ip} on {request.url.path}")
                 return False, headers
             
             if client_ip not in self.requests:

@@ -8,6 +8,7 @@ def enforce_production_security():
     """Ensure debug is False so SSRF protection is fully active."""
     original_debug = settings.debug
     settings.debug = False
+    settings.testing = True # Ensure rate limiting is still bypassed
     yield settings
     settings.debug = original_debug
 

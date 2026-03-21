@@ -2,8 +2,11 @@
 
 
 import pytest
+pytestmark = pytest.mark.browser
+
 from httpx import AsyncClient, ASGITransport
 from app.main import app
+pytestmark = pytest.mark.browser
 import uuid
 from typing import Dict
 

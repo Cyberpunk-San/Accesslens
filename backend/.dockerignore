@@ -1,41 +1,16 @@
-# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
-*.so
-
-# Environments
-.env
-.venv
-env/
 venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Testing
+.env
+.venv/
+env/
 .pytest_cache/
 .coverage
 htmlcov/
-
-# Logs and databases
-logs/
-*.sqlite3
-accesslens.db
-
-# VS Code / IDEs
-.vscode/
-.idea/
-
-# macOS
-.DS_Store
-
-# Git
+dist/
+build/
+*.egg-info/
 .git/
-.gitignore
-
-# Docker
-Dockerfile
 .dockerignore
+Dockerfile

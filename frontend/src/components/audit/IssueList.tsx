@@ -13,7 +13,25 @@ interface IssueListProps {
 export function IssueList({ issues, filter }: IssueListProps) {
   const filteredIssues = filter ? issues.filter(filter) : issues;
 
-  if (filteredIssues.length === 0) {
+  // Grouping logic: Group by issue_type and severity to reduce visual noise
+  const groupedIssues = filteredIssues.reduce((acc, issue) => {
+    const key = `${issue.issue_type}-${issue.severity}`;
+    if (!acc[key]) {
+      acc[key] = [];
+    }
+    acc[key].push(issue);
+    return acc;
+  }, {} as Record<string, UnifiedIssue[]>);
+
+  const groups = Object.values(groupedIssues).sort((a, b) => {
+    // Sort by severity (Critical first)
+    const severityOrder = { 'critical': 0, 'serious': 1, 'moderate': 2, 'minor': 3 };
+    const aSev = a[0].severity.toLowerCase() as keyof typeof severityOrder;
+    const bSev = b[0].severity.toLowerCase() as keyof typeof severityOrder;
+    return (severityOrder[aSev] ?? 99) - (severityOrder[bSev] ?? 99);
+  });
+
+  if (groups.length === 0) {
     return (
       <motion.div 
         initial={{ opacity: 0 }}
@@ -30,16 +48,17 @@ export function IssueList({ issues, filter }: IssueListProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <AnimatePresence>
-        {filteredIssues.map((issue, index) => (
+        {groups.map((group, index) => (
           <motion.div
-            key={issue.id}
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
+            key={`${group[0].issue_type}-${group[0].severity}-${index}`}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.05 }}
           >
-            <IssueCard issue={issue} />
+            {/* @ts-ignore - Adapting IssueCard to handle groups */}
+            <IssueCard issue={group[0]} group={group} />
           </motion.div>
         ))}
       </AnimatePresence>

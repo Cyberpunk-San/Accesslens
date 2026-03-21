@@ -66,16 +66,17 @@ class HeadingHierarchyAnalyzer:
             if last_level > 0 and (level - last_level) > 1:
                 issues.append({
                     "type": "heading_skip",
-                    "description": f"Heading levels skipped from H{last_level} to H{level}",
+                    "description": f"Heading levels skipped: H{last_level} to H{level}. Screen reader users rely on hierarchical order to understand content structure.",
                     "severity": "moderate",
                     "location": {"selector": heading.get("selector"), "index": index},
-                    "wcag": "1.3.1"
+                    "wcag": "1.3.1",
+                    "context": f"Previous: H{last_level}, Current: H{level}"
                 })
 
             if level > 6:
                  issues.append({
                     "type": "deep_nesting",
-                    "description": "Very deep heading nesting",
+                    "description": f"Heading level H{level} is nesting very deeply. Consider restructuring content for better readability.",
                     "severity": "minor",
                     "location": {"selector": heading.get("selector"), "index": index},
                     "wcag": "1.3.1"

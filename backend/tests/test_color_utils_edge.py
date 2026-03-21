@@ -1,4 +1,6 @@
 import pytest
+pytestmark = pytest.mark.unit
+
 from app.core.color_utils import RGBColor, ColorParser, ContrastCalculator
 
 def test_color_parser_edge_cases():
@@ -11,7 +13,7 @@ def test_color_parser_edge_cases():
     
     # CSS Formats
     assert ColorParser.parse("rgb(255, 255, 255)") == RGBColor(255, 255, 255)
-    assert ColorParser.parse("rgba(100, 100, 100, 0.5)") == RGBColor(100, 100, 100)
+    assert ColorParser.parse("rgba(100, 100, 100, 0.5)") == RGBColor(100, 100, 100, 0.5)
     assert ColorParser.parse("var(--primary)") is None
     assert ColorParser.parse("") is None
 

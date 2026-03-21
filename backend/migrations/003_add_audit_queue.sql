@@ -1,3 +1,5 @@
+-- POSTGRESQL-ONLY MIGRATION — not used by SQLite runtime (see migrations/001_init.sql for details)
+
 -- Async Queue state management
 
 CREATE TABLE IF NOT EXISTS audit_queue (

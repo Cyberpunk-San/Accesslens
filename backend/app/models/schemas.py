@@ -1,8 +1,7 @@
-
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, ValidationInfo
 from typing import List, Optional, Dict, Any, Union
 from enum import Enum
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 class IssueSeverity(str, Enum):
@@ -29,6 +28,12 @@ class WCAGLevel(str, Enum):
     AA = "AA"
     AAA = "AAA"
 
+class TaskPriority(str, Enum):
+    P0 = "P0" # Critical impact, fix immediately
+    P1 = "P1" # High impact, high priority
+    P2 = "P2" # Moderate impact
+    P3 = "P3" # Low impact / Best practice
+
 class WCAGCriteria(BaseModel):
 
     id: str
@@ -49,11 +54,15 @@ class ElementLocation(BaseModel):
     bounding_box: Optional[Dict[str, float]] = None
 
 class RemediationSuggestion(BaseModel):
-
+    """
+    Suggested fix for an accessibility issue.
+    """
     description: str
     code_before: Optional[str] = None
     code_after: Optional[str] = None
-    estimated_effort: Optional[str] = None
+    estimated_effort: Optional[str] = None # low, medium, high
+    estimated_fix_hours: Optional[float] = None # Estimated developer hours
+    verification_steps: List[str] = [] # Concrete steps to verify the fix
 
 class EvidenceData(BaseModel):
 
@@ -79,6 +88,7 @@ class UnifiedIssue(BaseModel):
     confidence: ConfidenceLevel
     confidence_score: float = Field(ge=0, le=100)
     source: IssueSource
+    priority: TaskPriority = Field(default=TaskPriority.P2)
 
 
     wcag_criteria: List[WCAGCriteria] = []
@@ -101,21 +111,23 @@ class UnifiedIssue(BaseModel):
     engine_version: Optional[str] = None
     tags: List[str] = []
 
-    @validator('confidence_score')
-    def validate_confidence(cls, v, values):
-        if 'confidence' in values:
-            if values['confidence'] == ConfidenceLevel.HIGH and v < 95:
+    @field_validator('confidence_score')
+    @classmethod
+    def validate_confidence(cls, v: float, info: ValidationInfo) -> float:
+        if 'confidence' in info.data:
+            confidence = info.data['confidence']
+            if confidence == ConfidenceLevel.HIGH and v < 95:
                 raise ValueError('HIGH confidence requires score >= 95')
-            elif values['confidence'] == ConfidenceLevel.MEDIUM and (v < 70 or v >= 95):
+            elif confidence == ConfidenceLevel.MEDIUM and (v < 70 or v >= 95):
                 raise ValueError('MEDIUM confidence requires 70 <= score < 95')
-            elif values['confidence'] == ConfidenceLevel.LOW and v >= 70:
+            elif confidence == ConfidenceLevel.LOW and v >= 70:
                 raise ValueError('LOW confidence requires score < 70')
         return v
 
 class AuditRequest(BaseModel):
 
     url: str
-    engines: List[str] = ["wcag", "structural", "contrast"]
+    engines: List[str] = ["wcag", "structural", "contrast", "heuristic", "navigation", "form"]
     enable_ai: bool = False
     depth: str = "standard"
     viewport: Dict[str, int] = {"width": 1280, "height": 720}
@@ -131,6 +143,7 @@ class AuditSummary(BaseModel):
     confidence_avg: float
     error: Optional[str] = None
     coverage_comparator: Dict[str, Any] = Field(default_factory=dict)
+    contrast_patterns: List[Dict[str, Any]] = Field(default_factory=list) # List of grouped contrast issues
 
 class AuditReport(BaseModel):
 

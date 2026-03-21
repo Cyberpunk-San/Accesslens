@@ -4,7 +4,7 @@ import aiosqlite
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 from ..models.schemas import AuditReport, UnifiedIssue, AuditRequest, AuditSummary
 from ..core.config import settings
@@ -116,9 +116,9 @@ class ReportStorage:
                 report.request.url,
                 report.timestamp.isoformat(),
                 report.summary.score,
-                json.dumps(report.summary.dict()),
+                json.dumps(report.summary.model_dump()),
                 json.dumps(report.metadata),
-                json.dumps(report.request.dict())
+                json.dumps(report.request.model_dump())
             )):
                 pass
 
@@ -141,10 +141,10 @@ class ReportStorage:
                     issue.confidence.value,
                     issue.confidence_score,
                     issue.source.value,
-                    json.dumps([c.dict() for c in issue.wcag_criteria]),
-                    json.dumps(issue.location.dict() if issue.location else None),
-                    json.dumps(issue.remediation.dict() if issue.remediation else None),
-                    json.dumps(issue.evidence.dict() if issue.evidence else None),
+                    json.dumps([c.model_dump() for c in issue.wcag_criteria]),
+                    json.dumps(issue.location.model_dump() if issue.location else None),
+                    json.dumps(issue.remediation.model_dump() if issue.remediation else None),
+                    json.dumps(issue.evidence.model_dump() if issue.evidence else None),
                     issue.engine_name,
                     json.dumps(issue.tags)
                 ))
@@ -325,8 +325,9 @@ class ReportStorage:
 
         try:
             async with self._conn.execute("DELETE FROM reports WHERE id = ?", (report_id,)):
-                await self._conn.commit()
-                return True
+                pass  # cursor context manager handles the execute
+            await self._conn.commit()  # commit after the cursor block closes
+            return True
         except Exception as e:
             self._logger.error(f"Failed to delete report {report_id}: {e}")
             return False
@@ -365,9 +366,31 @@ class ReportStorage:
         return await self.list_reports(url=url, limit=limit, offset=0)
 
     async def cleanup_old_reports(self, days: int = 30) -> int:
-        # SQLite doesn't have a direct "INTERVAL" logic like PG easily without multiple calls
-        # We can just use the ISO timestamp comparison
-        return 0 # Placeholder for simplicity, but could be implemented
+        """Delete reports older than `days` days. Returns number of deleted rows."""
+        if not self._conn:
+            # Clean up in-memory store
+            cutoff = datetime.now(timezone.utc).timestamp() - (days * 86400)
+            old_ids = [
+                rid for rid, r in self._in_memory_store.items()
+                if r.timestamp.timestamp() < cutoff
+            ]
+            for rid in old_ids:
+                del self._in_memory_store[rid]
+            return len(old_ids)
+
+        try:
+            # SQLite date arithmetic using ISO timestamp strings
+            async with self._conn.execute(
+                "DELETE FROM reports WHERE timestamp < datetime('now', ? || ' days')",
+                (f"-{days}",)
+            ) as cursor:
+                deleted = cursor.rowcount
+            await self._conn.commit()
+            self._logger.info(f"Cleaned up {deleted} reports older than {days} days")
+            return deleted
+        except Exception as e:
+            self._logger.error(f"Failed to cleanup old reports: {e}")
+            return 0
 
     async def close(self):
         if self._conn:

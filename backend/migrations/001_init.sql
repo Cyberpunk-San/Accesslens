@@ -1,3 +1,13 @@
+-- =============================================================================
+-- POSTGRESQL-ONLY MIGRATION — NOT COMPATIBLE WITH SQLITE
+-- This file uses PostgreSQL-specific types: JSONB, UUID, TEXT[], TIMESTAMP,
+-- CREATE OR REPLACE VIEW, and ->> / -> JSON operators.
+-- The Python application (report_storage.py) manages its own SQLite schema via
+-- _create_tables() and does NOT use these SQL migration files at runtime.
+-- These files are only applied by docker-entrypoint-initdb.d when using
+-- the optional PostgreSQL Docker service defined in docker-compose.yml.
+-- =============================================================================
+
 -- Initial schema for AccessLens
 
 CREATE TABLE IF NOT EXISTS schema_migrations (

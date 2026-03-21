@@ -2,6 +2,7 @@
 import asyncio
 import json
 import logging
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 from axe_playwright_python.async_playwright import Axe as AsyncAxe
 from axe_playwright_python.sync_playwright import Axe as SyncAxe
@@ -42,33 +43,63 @@ class WCAGEngine(BaseAccessibilityEngine):
         if not page:
             return []
 
+        # Guard: reject mock objects (AsyncMock, MagicMock) that have no real CDP
+        # connection. Calling axe.run() on a mock hangs until the timeout fires.
+        try:
+            from playwright.async_api import Page as PlaywrightPage
+            if not isinstance(page, PlaywrightPage):
+                logger.debug("Skipping axe-core: page is not a real Playwright Page (likely a mock)")
+                return []
+        except ImportError:
+            pass
+
         try:
             # Add timeout protection specifically for axe injection/run
             try:
-                # Use a larger timeout and ensure the page is actually ready
-                results = await asyncio.wait_for(self.axe.run(page), timeout=60.0)
+                results = await asyncio.wait_for(self.axe.run(page), timeout=30.0)
             except asyncio.TimeoutError:
                 logger.error(f"Axe-core execution timed out on {page.url}")
                 return []
             except Exception as inner_e:
                 logger.error(f"Axe-core injection or execution failed on {page.url}: {inner_e}")
-                # Potentially retry or check if it's a CDP connection issue
                 return []
 
             issues = []
 
-            for violation in results.violations:
-                for node in violation.nodes:
+            # Handle both dictionary and object formats (axe-playwright-python versions vary)
+            raw_results = {}
+            if hasattr(results, 'response') and isinstance(results.response, dict):
+                raw_results = results.response
+            elif isinstance(results, dict):
+                raw_results = results
+            elif hasattr(results, 'violations'):
+                # Handle direct object attribute access if present
+                raw_results = {
+                    'violations': results.violations,
+                    'incomplete': getattr(results, 'incomplete', [])
+                }
+            else:
+                logger.error(f"Unexpected axe results format: {type(results)}. No 'response' or 'violations' found.")
+                return []
+
+            violations = raw_results.get('violations', [])
+            incomplete_items = raw_results.get('incomplete', [])
+
+            for violation in violations:
+                # Individual violation might be a dict or an object
+                nodes = violation.get('nodes', []) if isinstance(violation, dict) else getattr(violation, 'nodes', [])
+                
+                for node in nodes:
                     issue = await self._convert_violation(violation, node, page)
                     issues.append(issue)
 
-                for incomplete in results.incomplete:
-                    if incomplete.id == violation.id:
-                        for node in incomplete.nodes:
-                            issue = await self._convert_violation(violation, node, page)
-                            issue.confidence = ConfidenceLevel.LOW
-                            issue.confidence_score = 50
-                            issues.append(issue)
+            for item in incomplete_items:
+                item_nodes = item.get('nodes', []) if isinstance(item, dict) else getattr(item, 'nodes', [])
+                for node in item_nodes:
+                    issue = await self._convert_violation(item, node, page)
+                    issue.confidence = ConfidenceLevel.LOW
+                    issue.confidence_score = 50
+                    issues.append(issue)
 
             return issues
 
@@ -79,22 +110,26 @@ class WCAGEngine(BaseAccessibilityEngine):
     async def _convert_violation(self, violation: Dict[str, Any], node: Dict[str, Any], page: Any) -> UnifiedIssue:
         wcag_criteria = []
         wcag_level = "AA"
-        if "wcag2a" in violation.tags:
+        tags = violation.get('tags', []) if isinstance(violation, dict) else getattr(violation, 'tags', [])
+        help_text = violation.get('help', 'WCAG violation') if isinstance(violation, dict) else getattr(violation, 'help', 'WCAG violation')
+        help_url = violation.get('helpUrl', '') if isinstance(violation, dict) else getattr(violation, 'helpUrl', '')
+
+        if "wcag2a" in tags:
             wcag_level = "A"
-        elif "wcag2aa" in violation.tags:
+        elif "wcag2aa" in tags:
             wcag_level = "AA"
-        elif "wcag2aaa" in violation.tags:
+        elif "wcag2aaa" in tags:
             wcag_level = "AAA"
 
-        for tag in violation.tags:
+        for tag in tags:
             if tag.startswith("wcag") and len(tag) >= 7 and tag[4:].isdigit():
                 digits = tag[4:]
                 wcag_id = ".".join(digits[i] for i in range(len(digits)))
                 wcag_criteria.append(WCAGCriteria(
                     id=wcag_id,
                     level=wcag_level,
-                    title=violation.help,
-                    url=violation.helpUrl
+                    title=help_text,
+                    url=help_url
                 ))
 
         confidence_score = ConfidenceCalculator.calculate_confidence(
@@ -127,17 +162,21 @@ class WCAGEngine(BaseAccessibilityEngine):
         remediation = None
         if node.get("html"):
             remediation = RemediationSuggestion(
-                description=f"Fix {violation.id}: {violation.help}",
+                description=f"Fix {violation.get('id', 'unknown') if isinstance(violation, dict) else getattr(violation, 'id', 'unknown')}: {help_text}",
                 code_before=node.get("html"),
-                code_after=self._suggest_fix(violation.id, node)
+                code_after=self._suggest_fix(violation.get('id', 'unknown') if isinstance(violation, dict) else getattr(violation, 'id', 'unknown'), node)
             )
 
+        violation_id = violation.get('id', 'unknown') if isinstance(violation, dict) else getattr(violation, 'id', 'unknown')
+        node_target = node.get('target', ['unknown'])[0] if isinstance(node, dict) else getattr(node, 'target', ['unknown'])[0]
+
         return UnifiedIssue(
-            title=violation.help,
-            description=violation.description,
-            issue_type=violation.id,
+            timestamp=datetime.now(),
+            title=help_text,
+            description=violation.get('description', 'WCAG violation') if isinstance(violation, dict) else getattr(violation, 'description', 'WCAG violation'),
+            issue_type=violation.get('id', 'wcag') if isinstance(violation, dict) else getattr(violation, 'id', 'wcag'),
             severity=self.IMPACT_MAPPING.get(
-                violation.impact,
+                violation.get('impact', 'moderate') if isinstance(violation, dict) else getattr(violation, 'impact', 'moderate'),
                 IssueSeverity.MODERATE
             ),
             confidence=ConfidenceLevel.HIGH,
@@ -151,7 +190,7 @@ class WCAGEngine(BaseAccessibilityEngine):
                 bounding_box=bounding_box
             ),
             actual_value=node.get("html"),
-            expected_value=self._get_expected_value(violation.id),
+            expected_value=self._get_expected_value(violation_id),
             remediation=remediation,
             evidence=EvidenceData(
                 stack_trace=node.get("failureSummary"),
@@ -159,7 +198,7 @@ class WCAGEngine(BaseAccessibilityEngine):
             ),
             engine_name=self.name,
             engine_version=self.version,
-            tags=violation.tags
+            tags=tags
         )
 
     def _suggest_fix(self, rule_id: str, node: Dict) -> str:

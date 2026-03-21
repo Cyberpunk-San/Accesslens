@@ -256,7 +256,7 @@ class AccessibilityTreeExtractor:
                 })
 
 
-            if not heading["text"] and heading["isVisible"]:
+            if not heading["text"].strip() and heading["isVisible"]:
                 issues.append({
                     "type": "empty_heading",
                     "description": f"Heading h{current_level} has no text content",
@@ -381,5 +381,5 @@ class AccessibilityTreeExtractor:
 
     def _get_timestamp(self) -> str:
 
-        from datetime import datetime
-        return datetime.utcnow().isoformat()
+        from datetime import datetime, timezone
+        return datetime.now(timezone.utc).isoformat()
