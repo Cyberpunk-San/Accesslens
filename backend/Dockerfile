@@ -11,10 +11,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install heavy AI dependencies first for better caching
-# Using a very high timeout because torch/transformers are several GBs
-RUN pip install --default-timeout=3000 --no-cache-dir torch transformers accelerate sentencepiece
-RUN pip install --default-timeout=1000 --no-cache-dir -r requirements.txt
+COPY requirements.txt .
+# Install all dependencies in one layer to stay cached
+# Using --prefer-binary speeds up torch/transformers by avoiding source builds
+RUN pip install --default-timeout=5000 --no-cache-dir --prefer-binary \
+    torch transformers accelerate sentencepiece Pillow numpy \
+    -r requirements.txt
 RUN playwright install chromium
 
 COPY . .
@@ -24,7 +26,9 @@ RUN mkdir -p data models
 EXPOSE 8000
 
 COPY scripts/docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh && \
+    chmod +x /usr/local/bin/docker-entrypoint.sh
 
-ENTRYPOINT ["docker-entrypoint.sh"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENV PYTHONPATH=/app
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

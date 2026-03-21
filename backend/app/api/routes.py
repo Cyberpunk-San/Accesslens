@@ -118,7 +118,6 @@ async def get_audit_status(audit_id: str, request: Request):
 
 @router.get("/engines")
 async def list_engines(request: Request):
-
     engines = request.app.state.engine_registry.get_all()
     return [
         {

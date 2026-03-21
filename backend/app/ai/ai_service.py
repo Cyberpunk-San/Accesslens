@@ -37,27 +37,46 @@ class AIService:
         existing_issues: List[UnifiedIssue]
     ) -> List[UnifiedIssue]:
         """
-        Analyze page via AI. Signature matches what the hardened tests expect.
+        AI Reasoning Layer:
+        1. Vision check for NEW layout-level issues.
+        2. Contextual enrichment for EXISTING issues (Why it matters).
         """
         new_issues = []
         
-        # 1. Vision check
+        # 1. Vision check for layout/visual things (Contrast, spacing, etc. not found by Axe)
         if self.config.llava_endpoint:
-            vision_results = await self._call_llava_api(screenshot_b64, "High-level scan")
+            vision_results = await self._call_llava_api(screenshot_b64, "Are there any obvious visual accessibility issues like tiny buttons or crowded text?")
             if vision_results:
                 new_issues = self._parse_vision_results(vision_results)
 
-        # 2. Enrich ALL issues with fixes using Mistral
+        # 2. Reasoning Layer: Enhance all issues with user-impact descriptions
         if self.config.mistral_endpoint:
-            all_to_fix = new_issues + existing_issues
-            for issue in all_to_fix:
-                fix_data = await self._call_mistral_api(f"Fix issue: {issue.title}")
-                if fix_data:
-                    issue.remediation = RemediationSuggestion(
-                        description=fix_data.get("explanation", "AI suggested fix"),
-                        code_after=fix_data.get("code_after", ""),
-                        estimated_effort=self._estimate_effort(fix_data.get("code_after", ""))
-                    )
+            all_issues = new_issues + existing_issues
+            
+            # Batch process or process top issues to avoid rate limits
+            for issue in all_issues[:20]: # Focus on top 20 for speed/cost
+                prompt = (
+                    f"Explain the practical impact on a user for this accessibility issue:\n"
+                    f"Title: {issue.title}\n"
+                    f"Description: {issue.description}\n"
+                    f"Return a JSON with: 'impact_narrative', 'recommended_fix', 'priority' (P0/P1/P2/P3)"
+                )
+                reasoning_data = await self._call_mistral_api(prompt)
+                
+                if reasoning_data:
+                    # Update the issue with AI insights
+                    if not issue.evidence:
+                        issue.evidence = EvidenceData()
+                    
+                    issue.evidence.ai_reasoning = reasoning_data.get("impact_narrative", "User might struggle to interact with this element.")
+                    issue.priority = reasoning_data.get("priority", issue.priority)
+                    
+                    # Update remediation if not present
+                    if not issue.remediation:
+                        issue.remediation = RemediationSuggestion(
+                            description=reasoning_data.get("recommended_fix", "See WCAG guidelines"),
+                            estimated_effort="medium"
+                        )
         
         return new_issues
 

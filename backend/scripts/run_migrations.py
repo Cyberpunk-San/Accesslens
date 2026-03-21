@@ -42,10 +42,15 @@ async def run_migrations(db_path: str):
                     continue
 
                 if version > current:
-                    logger.info(f"Applying migration {migration_file.name}...")
-                    
                     with open(migration_file, 'r') as f:
                         sql = f.read()
+
+                    # SKIP if it's a PostgreSQL-only migration and we are on SQLite
+                    if "POSTGRESQL-ONLY" in sql or "JSONB" in sql or "UUID" in sql:
+                        logger.info(f"Skipping incompatible migration {migration_file.name} for SQLite")
+                        continue
+
+                    logger.info(f"Applying migration {migration_file.name}...")
 
                     # SQLite executescript allows multiple statements
                     await db.executescript(sql)
