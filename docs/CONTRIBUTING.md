@@ -55,4 +55,5 @@ We maintain a strict tiered testing approach to balance speed and coverage.
 - **Async First**: Use `async/await` for all I/O and browser operations.
 - **Type Safety**: New components MUST include Pydantic models (backend) or TypeScript interfaces (frontend).
 
+---
 *Built with precision for the modern web.*

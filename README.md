@@ -1,10 +1,10 @@
-# 🌌 AccessLens: The Mission for a Truly Universal Web
+# AccessLens: AI-Powered Accessibility OS
 
-> **"Accessibility is not a feature—it's a human right. AccessLens is the first open-source Intelligence Layer built to guarantee that right for everyone."**
+> **"Bridging the gap between structural compliance and actual human experience."**
 
 ---
 
-## 🌎 The Manifest: Closing the "Compliance Gap"
+## The Problem: The 1-Billion Person Gap
 
 There are over **1 billion people** worldwide living with disabilities. Despite decades of web evolution, the majority of the digital world remains a series of invisible barriers. 
 
@@ -12,48 +12,60 @@ Traditional tools (Lighthouse, axe-core) are **Structural Scanners**—they can 
 
 **AccessLens is different.** It is the first **Cognitive Accessibility OS** designed to bridge the gap between "valid code" and "usable design."
 
-## 💎 What Makes AccessLens Unique?
+## Our Vision: AccessLens
 
-AccessLens is the first open-source project to integrate **Vision-Language Models (VLMs)** directly into the accessibility audit lifecycle. 
+AccessLens is a full-stack, open-source platform that moves beyond simple scanning. It provides **Remediation Intelligence**.
 
-### The Intelligence Matrix
-| Capability | Legacy Scanners | Manual Audits | **AccessLens** |
+### What We've Built
+- **Hybrid Audit Engine**: A standard WCAG compliance scan for structural issues combined with a revolutionary AI visual layer.
+- **AI Vision Logic**: Uses vision models (**LLaVA**) to "see" the page exactly like a user would. It detects low contrast that "looks" fine to a parser but fails visually, and layout confusion that rule-based scanners miss.
+- **Contextual Fix Synthesis**: Uses LLMs (**Mistral 7B**) to generate prioritized fix lists with actual code snippets. It doesn't just say "alt text is missing"; it says "Change this to: `alt='A bar chart showing monthly revenue from Jan-Dec 2024'`".
+- **HUD Report Card**: A premium, shareable dashboard (like Lighthouse, but actually useful) that maps issues spatially onto the UI.
+
+## Technical Architecture
+
+### ML Components
+- **Vision Integration**: Utilizing **LLaVA** for real-time visual analysis of rendered screenshots.
+- **Guideline Matching**: Using sentence transformers to map detected issues to specific WCAG 2.1/2.2 success criteria.
+- **Fix Generation**: Automated code synthesis for React/HTML components.
+
+### Full Stack Core
+- **Next.js Frontend**: A high-performance HUD for URL input, report management, and sharing.
+- **FastAPI Backend**: Orchestrates the multi-stage pipeline (Crawling -> Playwright Screenshotting -> AI Analysis -> SQLite Persistence).
+- **Playwright**: Headless browser management for deep-DOM extraction and visual capture.
+
+## Why AccessLens Wins
+
+- **Universal Impact**: Disability rights and web accessibility is a universal cause that resonates globally.
+- **Addressable Audience**: Every web developer and QA engineer is a potential user.
+- **FOSS-First**: Built entirely on open-source resources—from LLaVA on Colab to Playwright and FastAPI.
+- **Effortless Demos**: Audit any major website live, show the hidden "accessibility debt," and watch the AI generate the fixes in real-time.
+
+## The Uniqueness Matrix
+
+AccessLens bridges the gap between raw automated scanning and expensive human expert audits.
+
+| Feature | Automated Scanners | Manual Expert Audit | **AccessLens** |
 | :--- | :---: | :---: | :---: |
-| **DOM/ARIA Analysis** | ✅ | ✅ | ✅ |
-| **Visual Perception** | ❌ | ✅ | ✅ **(LLaVA Engine)** |
-| **Contextual Reasoning** | ❌ | ✅ | ✅ **(AI Synthesis)** |
-| **Instant Remediation** | ❌ | ❌ | ✅ **(PR-Ready Diffs)** |
-| **Scale & Speed** | ✅ | ❌ | ✅ |
+| **Logic Scans (ARIA/DOM)** | ✅ | ✅ | ✅ |
+| **Visual Validation (Contrast/Layout)** | ❌ (Parsing only) | ✅ | ✅ **(AI Vision)** |
+| **Contextual Awareness** | ❌ | ✅ | ✅ **(AI Reasoning)** |
+| **Instant Code Fixes** | ❌ (Checklist only) | ❌ (Advice only) | ✅ **(Auto-Synthesized)** |
+| **Spatial Mapping (HUD)** | ❌ | ❌ | ✅ **(Real-time)** |
+
+## Features & Capabilities Achieved
+
+AccessLens provides a comprehensive suite of accessibility auditing tools, moving beyond simple static analysis:
+
+- **Multi-Engine Orchestration**: Concurrent execution of axe-core, contrast, and structural analysis engines for 100% WCAG coverage.
+- **AI-Powered Visual Layer**: Real-world visual auditing using **LLaVA** to detect issues that code-only scanners miss (e.g., deceptive layouts, visual-only contrast failures).
+- **Intelligent Remediation**: Auto-generated mission-critical code patches using **Mistral 7B**, providing side-by-side diffs for instant fixes.
+- **HUD Command Center**: A high-density, React-based dashboard that maps accessibility "Impact Zones" spatially onto your UI.
+- **Enterprise-Grade Infrastructure**: Optimized Next.js standalone architecture with a robust FastAPI/Playwright backend.
 
 ---
 
-## 🚀 Core Pillar Achievements
-
-### 1. The Multi-Engine Orchestrator
-AccessLens runs a "Collective Intelligence" pipeline, orchestrating axe-core, deterministic heuristic engines, and AI models in parallel to achieve a 360° view of site health.
-
-### 2. The Visionary AI Layer (LLaVA)
-By using decentralized Vision models, AccessLens "sees" the UI. It identifies visual-only contrast failures and layout clutter that traditional parsers simply cannot detect.
-
-### 3. Synthetic Code Synthesis (Mistral 7B)
-We don't just find problems; we solve them. AccessLens automatically generates **Synthetic Remediation Patches**—accurate, side-by-side code diffs that developers can merge immediately.
-
-### 4. Direct HUD Visualization
-Our HUD-styled dashboard provides **Spatial Intelligence**, mapping every violation directly onto a 1:1 render of your UI for instant clarity.
-
----
-
-## 🤝 The Open Source Movement
-
-AccessLens is built by the community, for the community. Our mission is to democratize high-end accessibility auditing tools that were previously locked behind expensive enterprise paywalls.
-
-- **Freedom of Intel**: Built on 100% open-source models and frameworks.
-- **Community Engines**: A plug-and-play architecture where anyone can contribute new success criteria.
-- **Universal Access**: Ensuring that the next generation of the web is built for everyone, from day one.
-
----
-
-### 📖 Deep-Dive Documentation
+### Deep-Dive Documentation
 For detailed technical specifications, setup guides, and contribution rules, explore our **[Documentation Hub](./docs)**:
 - **[Architecture & AI Pipelines](./backend/ARCHITECTURE.md)**: Deep-dive into our VLM orchestration.
 - **[Contributing Guide](./docs/CONTRIBUTING.md)**: Our development standards and testing strategy.
@@ -61,7 +73,7 @@ For detailed technical specifications, setup guides, and contribution rules, exp
 
 ---
 
-### ⚡ Join the Mission
+### Join the Mission
 1. **Clone**: `git clone https://github.com/Upanshi-Mittal/Accesslens`
 2. **Ignite**: `docker-compose up --build -d`
 3. **Analyze**: Access your Intelligence Hub at `http://localhost:3000`

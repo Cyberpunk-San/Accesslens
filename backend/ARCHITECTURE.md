@@ -1,82 +1,79 @@
-# AccessLens Backend Architecture
+# AccessLens System Architecture
 
-AccessLens is a high-performance accessibility auditing platform that combines deterministic rule-based analysis with AI-powered contextual insights.
-
-## System Orchestration
-
-The backend architecture follows a non-blocking, asynchronous flow to ensure high throughput and reliability.
-
-```mermaid
-graph TD
-    A[REST Request] --> B[FastAPI Layer]
-    B --> C[Background Worker]
-    C --> D[AuditOrchestrator]
-    D --> E[Browser Manager]
-    D --> F[Engine Registry]
-    D --> G[AI Service]
-    E --> H[Playwright Clusters]
-    F --> I[6+ Deterministic Engines]
-    G --> J[LLaVA / Mistral Layer]
-    H & I & J --> K[Unified Issue Stream]
-    K --> L[SQLite Storage]
-```
-
-### Request Lifecycle
-1. **API Entry**: FastAPI validates the URL and options.
-2. **Backgrounding**: The request is offloaded to a `BackgroundTask` to free the worker thread.
-3. **Orchestration**: `AuditOrchestrator` coordinates browser acquisition and engine execution.
-4. **Synthesis**: Results from all engines are de-duplicated and normalized into the `UnifiedIssue` format.
+AccessLens is a high-performance accessibility auditing platform built on a modular "Collective Intelligence" architecture. It orchestrates deterministic heuristic engines with modern Vision-Language Models (VLMs) to provide contextual remediation.
 
 ---
 
-## Analysis Engines
+## Technical Stack
 
-AccessLens uses a multi-engine approach to achieve maximum sensitivity across different accessibility categories.
+- **Backend**: FastAPI (Python 3.10)
+- **Frontend**: Next.js 14 (App Router)
+- **Browser Automation**: Playwright (Headless Chromium)
+- **Database**: SQLite (Local persistence)
+- **Cache**: Redis (Task status & result caching)
 
-### 1. WCAG Engine (Deterministic)
-- **Core**: Powered by `axe-core` via `axe-playwright-python`.
-- **Capability**: Industry-standard checking for automated accessibility violations.
-- **Safety**: Implements 30s timeout guards and handles diverse AXE output formats.
+---
 
-### 2. Contrast Engine (Visual)
-- **Logic**: Evaluates computed CSS colors utilizing `getComputedStyle`.
-- **States**: Simulates interactive states (hover/focus) to detect contrast failures in dynamic elements.
-- **Precision**: Uses WCAG 2.1 contrast formulas for deterministic validation.
+## System Orchestration
 
-### 3. Structural & Form Engines (Semantic)
-- **Logic**: Deconstructs the DOM to verify heading hierarchies and ARIA landmarks.
-- **Validation**: Ensures label-input associations and correct usage of `aria-describedby` for error states.
+The system follows an asynchronous request-response lifecycle to ensure high availability during deep audits.
 
-### 4. Navigation & Heuristic Engines (UX)
-- **Logic**: Simulates keyboard Tab sequences to detect focus traps.
-- **Analysis**: Checks for deceptive link text ("click here") and estimates content reading complexity.
+```mermaid
+graph TD
+    A[Frontend Dashboard] -->|POST /audit| B(FastAPI Router)
+    B -->|Task ID| A
+    B -->|Enqueue| C[Audit Orchestrator]
+    C -->|Browser Launch| D[Playwright Instance]
+    D -->|Extract| E[DOM & AXTree]
+    D -->|Capture| F[Visual Screenshots]
+    E & F -->|Async Analysis| G[Analysis Registry]
+    G -->|Engine Result| H[Data Aggregator]
+    H -->|AI Synthesis| I[AI Service]
+    I -->|Remediation Strategy| J[Report Storage]
+    J -->|Cache| K[Redis]
+```
+
+---
+
+## Analysis Engines (Collective Intelligence)
+
+The core strength of AccessLens lies in its **Engine Registry**. Each engine is an isolated module that implements the `BaseAccessibilityEngine` interface.
+
+1. **AxeEngine**: Leverages `axe-core` for industry-standard WCAG 2.1 compliance.
+2. **ContrastEngine**: Performs high-fidelity color contrast analysis on rendered components.
+3. **StructureEngine**: Deep-scans the DOM for semantic integrity and landmark consistency.
+4. **HeuristicEngine**: Uses custom deterministic rules for keyboard navigability and interactable focus states.
 
 ---
 
 ## AI Integration Layer
 
-The "Intelligence" in AccessLens comes from its contextual layer, which deepens the audit where deterministic rules fail.
+Unlike traditional scanners, AccessLens uses a two-stage computer vision and code synthesis pipeline.
 
-### Core Pipelines
-- **Vision Recognition (LLaVA)**: Analyzes page screenshots to detect visual barriers like poor spacing, clutter, or visual focus indicators that code-only checkers miss.
-- **Refactoring Synthesis (Mistral 7B)**: Dynamically generates accessible code patches (`RemediationSuggestion`) for both deterministic and AI-found issues.
-- **Contextual Synthesis**: In "Hybrid" mode, the AI layer enriches all findings with confidence-scored metadata and expert repair strategies.
+### 1. Vision Recognition (LLaVA)
+AccessLens "sees" the UI using **LLaVA**. This engine identifies visual barriers that standard code parsers miss:
+- Deceptive design patterns.
+- Overlapping elements.
+- Meaningful information conveyed solely through visual cues (e.g., status icons without labels).
+
+### 2. Refactoring Synthesis (Mistral 7B)
+The system uses **Mistral 7B** to translate raw violations into production-ready code. Instead of vague warnings, it provides **Synthetic Code Patches**—accurate diffs showing exactly how to refactor the offending component.
 
 ---
 
 ## Data Strategy
 
-- **Persistence**: All audit results are stored in **SQLite**, ensuring a lightweight yet robust history.
-- **Artifacts**: Screenshots and DOM snapshots are indexed via UUID and stored in the `/data` directory.
-- **Metrics**: Integrated Prometheus exporters track audit duration and issue density across engines.
+- **Deduplication**: The Orchestrator uses fuzzy matching to ensure that identical issues across multiple engines are unified into a single report.
+- **Persistence**: Audit results and AX-Tree snapshots are stored in SQLite, while high-resolution screenshots are managed in the `storage/` directory.
+- **Caching**: Global audit status is synchronized via Redis to provide real-time updates to the dashboard via polling.
 
 ---
 
 ## Evolutionary Roadmap
 
-The platform is continuously evolving to handle modern web complexities:
-1. **Visual Focus Indicators**: Improving automated detection of missing focus rings on interactive elements.
-2. **Shift+Tab Traversal**: Expanding navigation checks to include reverse keyboard paths.
-3. **Dynamic SPA Support**: Support for re-auditing pages after complex state migrations.
+- **Multi-Page Crawling**: Expanding analysis from single-page snapshots to full-site recursive audits.
+- **Automated PR Generation**: Directly injecting fix suggestions into CI/CD pipelines.
+- **Enterprise Reporting**: PDF export and team-based compliance dashboards.
 
+---
 *Built with precision for the modern web.*

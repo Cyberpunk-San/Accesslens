@@ -5,7 +5,7 @@ This guide provides step-by-step instructions for setting up the AccessLens plat
 ## Prerequisites
 
 - **Python**: 3.10 or higher
-- **Node.js**: 18.x or higher
+- **Node.js**: 20.x (recommended for Tailwind v4 support)
 - **Playwright**: Installed via `playwright install`
 - **SQLite**: (Built-in to Python)
 
@@ -36,7 +36,7 @@ The backend handles audit orchestration, browser management, and engine analysis
    ```
 
 4. **Configuration**:
-   Copy `.env.example` to `.env` and adjust settings (database URL, API keys for AI, etc.).
+   Copy `.env.example` to `.env` and adjust settings (database URL, local AI model paths, etc.).
 
 5. **Run the server**:
    ```bash
@@ -44,10 +44,10 @@ The backend handles audit orchestration, browser management, and engine analysis
    ```
    The backend will be available at `http://localhost:8000`.
 
-> [!TIP]
-> **AI Models**: By default, AccessLens connects to LLaVA and Mistral via API endpoints. If you wish to use local weights instead:
-> 1. Download the GGUF/Safetensors weights to the root `models/` directory.
-> 2. Set `AI_USE_LOCAL=True` and configure the appropriate paths in your `.env`.
+> [!NOTE]
+> **AI Models**: By default, AccessLens connects to LLaVA and Mistral via local endpoints. 
+> 1. Download the model weights to the root `models/` directory.
+> 2. Configure the appropriate paths in your `.env`.
 
 ---
 
@@ -81,7 +81,7 @@ The frontend is a Next.js application for visualizing audit results.
 
 ## 3. Production Deployment (Docker)
 
-AccessLens uses a root-level `docker-compose.yml` for unified orchestration of the frontend, backend, and Redis services.
+AccessLens uses a root-level `docker-compose.yml` for unified orchestration.
 
 1. **Build and start all services**:
    ```bash
@@ -102,6 +102,10 @@ AccessLens uses a root-level `docker-compose.yml` for unified orchestration of t
 
 ## 4. Troubleshooting
 
-- **Browser Crashes**: Ensure `playwright install chromium` was successful and that your environment has the necessary libraries for headless browsers.
-- **Database Errors**: If `accesslens.db` becomes corrupted or needs a reset, delete the file and restart the backend; it will automatically recreate the schema.
-- **Port Conflicts**: If ports 3000 or 8000 are occupied, adjust the `docker-compose.yml` or your local environment variables.
+- **Browser Crashes**: Ensure `playwright install chromium` was successful and that your environment has required libraries.
+- **Database Errors**: If `accesslens.db` needs a reset, delete the file and restart the backend.
+- **Port Conflicts**: If port 3000 is occupied, stop any running `npm run dev` processes or other Docker containers.
+- **Native Binding Errors**: If you encounter `@tailwindcss/oxide` errors during Docker build, refer to the optimized `Dockerfile` which bypasses host lockfiles.
+
+---
+*Built with precision for the modern web.*

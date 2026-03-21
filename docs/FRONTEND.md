@@ -1,55 +1,61 @@
-# AccessLens Frontend Architecture
+# AccessLens Frontend: The Cyber-HUD Architecture
 
-The AccessLens frontend is a high-performance, premium dashboard built with **Next.js 14**, utilizing the **App Router** and a HUD-inspired design system.
+The AccessLens frontend is a high-performance, **Intelligence Hub** built with **Next.js 14**. It is designed with a "Cyber-HUD" (Heads-Up Display) aesthetic, prioritizing technical density, visual depth, and real-time feedback.
 
-## Core Technologies
+---
+
+## Technical Stack
 
 - **Framework**: Next.js 14 (App Router)
-- **Styling**: Tailwind CSS v4 (Alpha/Edge) + CSS Variables
-- **State Management**: TanStack React Query (Server/Client state synchronization)
-- **Animations**: Framer Motion (Smooth layout transitions and micro-interactions)
-- **Icons**: Lucide React
-- **Typography**: Inter (Body), Outfit (Headings)
+- **Styling**: Tailwind CSS v4 (Full CSS-variable integration)
+- **Animations**: Framer Motion (Orchestrating all layout transitions and HUD micro-interactions)
+- **Visual Effects**: Vanilla Canvas + CSS (Matrix Rain, Scanning Shaders)
+- **State & Data**: TanStack React Query + Custom Hooks
+- **Icons**: Lucide React (Symbolic consistency)
 
-## Visual Architecture
+---
 
-The UI is designed to feel like a "Command Center" or "Digital Intelligence Hub," prioritizing dark aesthetics, glassmorphism, and glowing elements.
+## Design System: The Cyber-HUD Aesthetic
 
-### 1. Intelligence Dashboard (`/dashboard`)
-- Provides a high-level summary of recent audit activity.
-- Visual components for audit frequency, severity distribution, and average compliance scores.
+AccessLens follows a strict "Technical UI" language, designed to feel like an advanced operating system rather than a traditional website.
 
-### 2. Audit Results (`/audit/[id]`)
-The core analysis view, split into specialized tabs:
+### 1. The Matrix Foundation
+The application uses a **MatrixRain** canvas background to provide low-distraction visual motion, reinforcing the "Digital Intelligence" theme. This is implemented via a high-performance Canvas element with custom glyph-streaming logic.
 
-- **Issue Matrix**: A detailed list of all detected barriers, categorized by severity and engine source.
-- **Spatial Map (Heatmap)**: An interactive overlay that maps issues directly onto the target page's screenshot.
-- **Tree Map**: A hierarchical "Digital Architecture" explorer for the Accessibility Tree (AX Tree).
-- **Intelligence (Analytics)**: High-level executive synthesis and engine-specific breakdowns.
+### 2. HUD Fragments & Clippings
+Interactive elements use **Cyber-Hex** and **Clipped Corner** patterns:
+- **Glassmorphism**: 1px translucent borders (`white/10`) with heavy `backdrop-blur-3xl`.
+- **Adaptive HUD Borders**: Containers often feature "Tech Corner" accents—floating L-shaped borders that highlight active focus zones.
+- **Floating HUD Elements**: The `AuditLoading` component uses floating data fragments and sweeping scan-lines to communicate background processing state.
 
-## Key Components
+### 3. Typography & Symbolism
+- **Primary Type**: Monospace (`Roboto Mono` / `Courier New`) for technical data and headers.
+- **Functional Icons**: Precise Lucide icons used for "Intelligence Summary," "Spatial Map," and "Remediation Strategy."
 
-- `IntelligenceSummary.tsx`: Synthesizes raw audit data into a readable technical briefing.
-- `HeatmapOverlay.tsx`: Manages the spatial coordinate mapping and "ping" animations for issues.
-- `TreeVisualizer.tsx`: Recursively renders the AX tree with search and a dedicated "Node Inspector."
-- `AuditLoading.tsx`: A premium "Cyber-Scan" animation for wait states.
-- `AuditMeditation.tsx`: A tranquil wait-state for longer data syntheses.
+---
 
-## Design System
+## Core Views & Components
 
-The design system is defined primarily through tailored CSS variables in `globals.css` and a custom theme block in `tailwind.config.js`.
+### 1. The HUD Dashboard (`/dashboard`)
+The central command center. Focused on high-level executive metrics:
+- **Audit Pulse**: A visual record of scan frequency.
+- **Severity Heatmap**: A color-coded distribution of critical vs. moderate barriers.
 
-- **Colors**:
-  - `brand`: Deep Indigo/Violet primary.
-  - `slate`: Technical neutral for borders/secondary text.
-  - `rose`: Critical severity signals.
-  - `amber`: Serious/Moderate warnings.
-- **Glassmorphism**: Extensive use of `backdrop-blur` and low-opacity borders (`white/5`) to create depth.
-- **Glow Effects**: Precise `box-shadow` and `filter: drop-shadow` utilities for high-end visual feedback.
+### 2. The Remediation Hub (`/audit/[id]`)
+Where structural data meets AI intelligence.
+- **The Issue Matrix**: A filterable HUD list of violations.
+- **The Intelligence Layer**: Executive summaries synthesized from engine output.
+- **Remediation Strategy**: Side-by-side **Synthetic Code Patches**—AI-generated diffs showing the exact code fix required.
+- **Heatmap Overlay**: A 1:1 spatial mapping system that "pings" violations directly onto the page screenshot.
+- **Tree Visualizer**: An interactive explorer for the Accessibility Tree (AX Tree).
 
-## Data Fetching Pattern
+---
 
-AccessLens uses custom hooks (`src/hooks/use-audits.ts`) that wrap `useQuery`. This ensures:
-- Automatic caching and revalidation of audit results.
-- Robust loading/error states integrated with the `AuditLoading` and `AuditMeditation` components.
-- Optimistic updates for new audit submissions.
+## Performance Patterns
+
+- **Standalone Optimization**: The frontend is built for **Next.js Standalone mode**, significantly reducing Docker image size and cold-start times.
+- **Hydration Guards**: Specialized logic for Matrix and HUD effects to ensure smooth SSR-to-Client transitions.
+- **Optimistic HUD**: Immediate UI feedback for new audit submissions before background analysis completes.
+
+---
+*Built for the next generation of digital accessibility.*
