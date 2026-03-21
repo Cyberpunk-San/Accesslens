@@ -40,6 +40,9 @@ ISSUES_FOUND = Counter(
     ['severity']
 )
 
+def resolve_engine_name(app, name: str):
+    return app.state.engine_aliases.get(name, name)
+
 @router.post("/audit", response_model=Dict[str, str])
 async def start_audit(
     audit_request: AuditRequest,
@@ -64,6 +67,11 @@ async def start_audit(
 
     logger.info(f"Starting audit {audit_id} for URL: {audit_request.url}")
 
+    if audit_request.engines:
+        audit_request.engines = [
+            resolve_engine_name(request.app, name)
+            for name in audit_request.engines
+        ]
 
     orchestrator = AuditOrchestrator(
         engine_registry=request.app.state.engine_registry
@@ -119,9 +127,15 @@ async def get_audit_status(audit_id: str, request: Request):
 @router.get("/engines")
 async def list_engines(request: Request):
     engines = request.app.state.engine_registry.get_all()
+    aliases = request.app.state.engine_aliases
+
+    # reverse mapping
+    reverse_alias = {v: k for k, v in aliases.items()}
+    
     return [
         {
-            "name": engine.name,
+            "name": reverse_alias.get(engine.name, engine.name),  # 👈 alias
+            "internal_name": engine.name,
             "version": engine.version,
             "capabilities": engine.capabilities
         }
