@@ -11,8 +11,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --default-timeout=100 --no-cache-dir -r requirements.txt
+# Install heavy AI dependencies first for better caching
+# Using a very high timeout because torch/transformers are several GBs
+RUN pip install --default-timeout=3000 --no-cache-dir torch transformers accelerate sentencepiece
+RUN pip install --default-timeout=1000 --no-cache-dir -r requirements.txt
 RUN playwright install chromium
 
 COPY . .

@@ -1,4 +1,4 @@
-
+#!/bin/bash
 set -e
 
 RED='\033[0;31m'
@@ -9,10 +9,10 @@ NC='\033[0m'
 echo -e "${GREEN} Starting AccessLens Development Environment${NC}"
 echo "========================================"
 
-
 command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
+
 echo -e "\n${YELLOW}Checking prerequisites...${NC}"
 
 if ! command_exists python3; then
@@ -20,14 +20,19 @@ if ! command_exists python3; then
     exit 1
 fi
 
-if ! command_exists docker; then
-    echo -e "${RED} Docker not found${NC}"
-    exit 1
-fi
-
 if ! command_exists npm; then
     echo -e "${RED} npm not found${NC}"
     exit 1
+fi
+
+# Start Redis for caching if needed
+echo -e "\n${YELLOW}Redis is used for caching only.${NC}"
+read -p " Start Redis container? [y/N] " -n 1 -r
+echo ""
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo -e "${YELLOW}Starting Redis...${NC}"
+    docker-compose up -d redis
+    echo -e "${GREEN} Redis started${NC}"
 fi
 
 echo -e "${GREEN} All prerequisites satisfied${NC}"
@@ -49,22 +54,7 @@ if [ ! -f ".env" ]; then
 fi
 
 # Load environment variables
-source .env
-
-# Start services based on mode
-case "$1" in
-    "docker")
-        echo -e "\n${YELLOW}Starting Docker services...${NC}"
-        docker-compose up -d postgres redis
-        echo -e "${GREEN} Docker services started${NC}"
-        ;;
-    "local")
-        echo -e "\n${YELLOW}Using local services${NC}"
-        ;;
-    *)
-        echo -e "\n${YELLOW}Starting in development mode${NC}"
-        ;;
-esac
+export $(grep -v '^#' .env | xargs)
 
 # Start backend
 echo -e "\n${YELLOW}Starting backend server...${NC}"
@@ -72,17 +62,8 @@ uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8000 &
 BACKEND_PID=$!
 echo -e "${GREEN} Backend started (PID: $BACKEND_PID)${NC}"
 
-# Wait for backend to start
+# Wait for backend
 sleep 3
-
-# Check if backend is responding
-if curl -s http://localhost:8000/health > /dev/null; then
-    echo -e "${GREEN} Backend health check passed${NC}"
-else
-    echo -e "${RED} Backend health check failed${NC}"
-    kill $BACKEND_PID
-    exit 1
-fi
 
 # Start frontend
 echo -e "\n${YELLOW}Starting frontend...${NC}"
@@ -95,9 +76,7 @@ echo -e "${GREEN} Frontend started (PID: $FRONTEND_PID)${NC}"
 echo -e "\n${GREEN} All services started!${NC}"
 echo -e " Frontend: ${GREEN}http://localhost:3000${NC}"
 echo -e " Backend API: ${GREEN}http://localhost:8000${NC}"
-echo -e " API Docs: ${GREEN}http://localhost:8000/docs${NC}"
-echo -e "\n${YELLOW}Press Ctrl+C to stop all services${NC}"
 
-trap 'echo -e "\n${YELLOW}Stopping services...${NC}"; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; echo -e "${GREEN} Services stopped${NC}"; exit 0' INT TERM
+trap 'echo -e "\n${YELLOW}Stopping services...${NC}"; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; exit 0' INT TERM
 
 wait

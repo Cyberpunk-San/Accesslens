@@ -1,67 +1,47 @@
-
-
-
-
 import asyncio
-import asyncpg
+import aiosqlite
 import argparse
 from datetime import datetime, timedelta
+from pathlib import Path
+import sys
 
-async def cleanup_reports(days: int, host: str, port: int, database: str, user: str, password: str):
-
-
-    conn = await asyncpg.connect(
-        host=host,
-        port=port,
-        user=user,
-        password=password,
-        database=database
-    )
-
-    cutoff_date = datetime.now() - timedelta(days=days)
-
-
-    count = await conn.fetchval(
-        "SELECT COUNT(*) FROM reports WHERE timestamp < $1",
-        cutoff_date
-    )
-
-    if count == 0:
-        print(f"No reports older than {days} days found")
+async def cleanup_reports(days: int, db_path: str):
+    path = Path(db_path)
+    if not path.exists():
+        print(f"Database file not found at {db_path}")
         return
 
-    print(f"Found {count} reports older than {days} days")
+    cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
 
+    try:
+        async with aiosqlite.connect(db_path) as db:
+            # Check count
+            async with db.execute("SELECT COUNT(*) FROM reports WHERE timestamp < ?", (cutoff_date,)) as cursor:
+                row = await cursor.fetchone()
+                count = row[0] if row else 0
 
-    result = await conn.execute(
-        "DELETE FROM reports WHERE timestamp < $1",
-        cutoff_date
-    )
+            if count == 0:
+                print(f"No reports older than {days} days found")
+                return
 
-    deleted = result.split()[-1]
-    print(f"Deleted {deleted} reports")
+            print(f"Found {count} reports older than {days} days")
 
-    await conn.close()
+            # Delete
+            await db.execute("DELETE FROM reports WHERE timestamp < ?", (cutoff_date,))
+            await db.commit()
+            print(f"Deleted {count} old reports from database")
+            
+    except Exception as e:
+        print(f"Cleanup failed: {e}")
 
 def main():
-    parser = argparse.ArgumentParser(description="Clean up old reports")
+    parser = argparse.ArgumentParser(description="Clean up old reports from SQLite")
     parser.add_argument("--days", type=int, default=30, help="Delete reports older than DAYS")
-    parser.add_argument("--host", default="localhost", help="Database host")
-    parser.add_argument("--port", type=int, default=5432, help="Database port")
-    parser.add_argument("--database", default="accesslens", help="Database name")
-    parser.add_argument("--user", default="accesslens", help="Database user")
-    parser.add_argument("--password", default="accesslens", help="Database password")
+    parser.add_argument("--db-path", default="./accesslens.db", help="Path to SQLite database")
 
     args = parser.parse_args()
 
-    asyncio.run(cleanup_reports(
-        days=args.days,
-        host=args.host,
-        port=args.port,
-        database=args.database,
-        user=args.user,
-        password=args.password
-    ))
+    asyncio.run(cleanup_reports(days=args.days, db_path=args.db_path))
 
 if __name__ == "__main__":
     main()

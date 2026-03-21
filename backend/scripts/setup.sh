@@ -1,4 +1,3 @@
-# backend/scripts/setup.sh
 #!/bin/bash
 
 # AccessLens Setup Script
@@ -23,8 +22,9 @@ chmod -R 755 logs
 
 # Check Python version
 echo " Checking Python version..."
+# Accepting 3.10 or higher for broader compatibility
 python_version=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-required_version="3.11"
+required_version="3.10"
 
 if [ "$(printf '%s\n' "$required_version" "$python_version" | sort -V | head -n1)" = "$required_version" ]; then 
     echo " Python $python_version detected"
@@ -41,7 +41,8 @@ source venv/bin/activate
 # Install dependencies
 echo " Installing Python dependencies..."
 pip install --upgrade pip
-pip install -r requirements.txt
+# Note: requirements.txt is optimized for fast builds
+pip install --default-timeout=1000 -r requirements.txt
 
 # Install Playwright browsers
 echo " Installing Playwright browsers..."
@@ -55,18 +56,19 @@ if [ ! -f .env ]; then
     echo " Please edit .env with your configuration"
 fi
 
-# Ask about model download
+# Ask about model download (Optional)
 echo ""
-read -p " Download AI models now? (requires ~30GB space) [y/N] " -n 1 -r
+echo "AI models are ~30GB. You can skip this and use API endpoints instead."
+read -p " Download AI models now? [y/N] " -n 1 -r
 echo ""
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "Downloading models..."
     python scripts/download_models.py --path ./models --all
 fi
 
-# Setup database
+# Setup database (SQLite)
 echo ""
-read -p " Setup PostgreSQL database? [y/N] " -n 1 -r
+read -p " Initialize SQLite database? [y/N] " -n 1 -r
 echo ""
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     python scripts/setup_db.py

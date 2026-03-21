@@ -1,7 +1,6 @@
 # backend/scripts/cleanup.sh
 #!/bin/bash
 
-# Cleanup script for AccessLens
 set -e
 
 echo " AccessLens Cleanup Utility"
@@ -140,6 +139,7 @@ show_menu() {
             clean_logs
             clean_cache
             clean_screenshots
+            clean_redis
             ;;
         0) exit 0 ;;
         *) echo -e "${RED}Invalid option${NC}" ;;
