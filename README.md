@@ -6,11 +6,11 @@
 
 ## The Problem: The Accessibility Gap
 
-There are over **1 billion people** worldwide living with disabilities. Despite the maturity of web standards, the majority of the digital landscape remains inaccessible due to a fundamental limitation in traditional tooling.
+Over **1 billion people** live with disabilities, yet much of the web remains inaccessible.
 
-Standard tools (Lighthouse, axe-core) are **Structural Scanners**—they check for code compliance but are "blind" to the actual human experience. They cannot detect confusing layouts, insufficient contrast in dynamic states, or non-descriptive imagery that stops a user in their tracks.
+Traditional tools like Lighthouse and axe-core check code compliance—but miss real user experience. They fail to detect confusing layouts, poor contrast in dynamic states, and non-descriptive content that actually blocks users.
 
-**AccessLens was built to resolve this drawback.** It is an **AI-Driven Accessibility Layer** designed to bridge the gap between "valid code" and "usable design." The platform doesn't just find issues; it analyzes the **perceptual layer** using vision models and synthesizes localized remediations.
+**AccessLens solves this gap.** It detects real-world accessibility issues and generates actionable fixes by analyzing how interfaces are actually experienced—not just how they are coded.
 
 ---
 
