@@ -1,62 +1,64 @@
-# AccessLens Architectural Overview
+# AccessLens Architecture Overview
 
-AccessLens is a high-performance, AI-driven accessibility auditing platform designed to provide deep, multi-engine analysis of web applications.
+AccessLens is a modular accessibility auditing platform built on a **Collective Intelligence** pipeline. It orchestrates deterministic heuristic engines with AI-driven vision analysis.
 
-## High-Level System Architecture
+---
 
-AccessLens follows a modern decoupled architecture with a Python-based analysis backend and a Next.js-based visualization frontend.
+## System Flow
+
+Audits are processed asynchronously to ensure non-blocking performance.
 
 ```mermaid
 graph TD
     User((User))
-    Frontend[Next.js Frontend]
-    Backend[FastAPI Backend]
-    Browser[Playwright Browser Pool]
-    Engines[Analysis Engines]
-    DB[(SQLite Database)]
+    Frontend[Next.js Dashboard]
+    Backend[FastAPI Audit API]
+    Orchestrator[Audit Orchestrator]
+    Browser[Browser Manager]
+    Engines[7 Deterministic Engines]
+    AI[VLM AI Layer]
+    Report[(SQLite Storage)]
 
-    User -->|Initiates Audit| Frontend
-    Frontend -->|REST API Request| Backend
-    Backend -->|Manages| Browser
-    Browser -->|Scans Target URL| Engines
-    Engines -->|Generate Reports| Backend
-    Backend -->|Persist Results| DB
-    Backend -->|Retrieved Results| Frontend
+    User -->|Audit URL| Frontend
+    Frontend -->|POST /audit| Backend
+    Backend -->|Enqueue| Orchestrator
+    Orchestrator -->|Lease Page| Browser
+    Browser -->|Extract AX-Tree/DOM| Engines
+    Engines -->|Parallel Scan| AI
+    AI -->|Remediation Fixes| Report
+    Report -->|JSON/DB| Backend
+    Backend -->|Poll Status| Frontend
 ```
 
-### 1. Analysis Backend (Python/FastAPI)
-The core intelligence layer responsible for:
-- **Audit Orchestration**: Managing the lifecycle of an audit request.
-- **Browser Lifecycle**: Pooling and managing headless Playwright instances.
-- **Engine Synthesis**: Running multiple accessibility engines (Axe-Core, Pa11y, etc.) and synthesizing results.
-- **Data Persistence**: Storing audit records, snapshots, and metrics.
+---
 
-### 2. Visualization Frontend (Next.js 14)
-A premium, HUD-inspired dashboard for:
-- **Intelligence Dashboard**: Real-time overview of recent audit activity.
-- **Spatial Map (Heatmap)**: Visualizing accessibility barriers directly on page screenshots.
-- **Architectural Explorer**: Navigating the accessibility tree (AX Tree).
-- **Executive Summaries**: AI-synthesized briefings for rapid understanding.
+## The 7-Engine Pipeline
 
-### 3. Engine Intelligence
-AccessLens uses a "Collective Intelligence" approach, combining:
-- **Heuristic Engines**: Rule-based scanners (WCAG 2.1/2.2).
-- **Spatial Detectors**: Analyzing layout and visual contrast.
-- **Structural Analyzers**: Deconstructing the DOM and Accessibility Tree.
+AccessLens combines specialized logic to provide 100% coverage:
+
+1.  **WCAG Engine**: Industry-standard compliance via `axe-core`.
+2.  **Structural Engine**: Validates semantic HTML and ARIA landmarks.
+3.  **Contrast Engine**: High-fidelity color contrast analysis of rendered UI.
+4.  **Heuristic Engine**: Deterministic rules for UX patterns (e.g., redundant links).
+5.  **Navigation Engine**: Keyboard accessibility and focus-trap detection.
+6.  **Form Engine**: Input-label associations and error-message linking.
+7.  **AI Engine**: Multi-modal vision analysis for contextual fixes.
+
+---
+
+## Key Infrastructure
+
+- **Browser Manager (Singleton)**: Manages a shared pool of Playwright instances with auto-recovery logic for crashed nodes.
+- **Engine Registry**: Supports **Dynamic Aliasing** (e.g., `wcag` → `wcag_deterministic`), allowing the API to remain user-friendly while internal logic stays modular.
+- **Audit Orchestrator**: Handles parallel execution, result deduplication, and severity normalization.
+
+---
 
 ## Technical Stack
 
-| Layer | Technology |
-| :--- | :--- |
-| **Frontend** | Next.js 14 (App Router), React Query, Framer Motion, Tailwind CSS v4, Lucide Icons |
-| **Backend** | Python 3.10+, FastAPI, Playwright (Async), SQLModel / SQLite |
-| **Analysis** | Axe-Core, Custom Heuristic Engines, PIL (Spatial Analysis) |
-| **Documentation** | Markdown, Mermaid.js |
+- **Backend**: FastAPI (Python 3.10+), Playwright, SQLite, Redis.
+- **Frontend**: Next.js 14, React Query, Framer Motion, Tailwind CSS.
+- **Optimization**: Multi-stage Docker builds with **CPU-only Torch** footprint.
 
-## Key Directories
-
-- `/backend`: Core Python logic, engines, and API.
-- `/frontend`: Next.js application and UI components.
-- `/docs`: Centralized documentation hub.
-- `/backend/data`: Persistent storage for screenshots and session data.
-- `/models`: (Optional) Repository for local LLM weights (bypassed in API mode).
+---
+*Built for the accessible web.*

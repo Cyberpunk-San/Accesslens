@@ -1,45 +1,58 @@
-# AccessLens Backend Architecture
+# AccessLens Backend Technical Guide
 
-The AccessLens backend is a high-performance auditing engine built with **Python**, **FastAPI**, and **Playwright**. It orchestrates multiple analysis engines to provide a comprehensive accessibility report.
+The AccessLens backend is a high-performance auditing suite designed for modular expansion and high-fidelity analysis.
 
-## Core Components
+---
 
-### 1. API Layer (FastAPI)
-The entry point for all frontend requests. It handles:
-- **Audit Submission**: Accepts URLs and configuration options.
-- **Background Tasks**: Offloads intensive analysis to an async orchestrator.
-- **Data Retrieval**: Serves audit results and historical metrics from SQLite.
+## Core Architecture
 
-### 2. Audit Orchestrator
-The "brain" of the backend. It manages the lifecycle of an audit:
-- Initialize the target page.
-- Parallelize execution of multiple deterministic engines.
-- Synthesize all findings into a unified, de-duplicated issue list.
-- Calculate final compliance scores and confidence metrics.
+### 1. API Intelligence (FastAPI)
+Handles RESTful communication, validation, and async task orchestration.
+- **V1 Router**: Standardized endpoints for audits and engine discovery.
+- **BackgroundTasks**: Offloads compute-heavy analysis without blocking the user.
+- **Rate Limiting**: Custom sliding-window middleware to prevent abuse.
 
-### 3. Browser Manager
-A robust pooling system for **Playwright/Chromium**:
-- Handles browser lifecycle and context isolation.
-- Ensures efficient resource usage by reusing browser instances where possible.
+### 2. The Orchestration Layer
+The **Audit Orchestrator** manages the "lifecycle of discovery":
+1.  **Lease Page**: Requests an isolated Chromium page from the `BrowserManager`.
+2.  **Snapshot**: Captures the raw AX-Tree, DOM, and visual state.
+3.  **Parallel Execution**: Triggers all selected engines simultaneously.
+4.  **Issue Synthesis**: Deduplicates overlapping findings and normalizes scoring.
 
-## Analysis Engines
+### 3. Engine Registry & Aliasing
+A dynamic system that maps user-friendly names (e.g., `wcag`) to robust internal implementations (`WCAGDeterministicEngine`). This allows for decoupled engine development and versioning.
 
-AccessLens uses a multi-engine strategy to ensure maximum coverage:
+---
 
-- **WCAG Engine**: Powered by **axe-core**, the industry standard for programmatic accessibility testing.
-- **Contrast Engine**: Evaluates computed CSS colors, including hover and focus states, to find contrast failures.
-- **Structural Engine**: Analyzes heading hierarchy, ARIA landmarks, and semantic HTML markers.
-- **Form Engine**: Validates label-input associations and ARIA descriptions for interactive fields.
-- **Heuristic Engine**: Catches UX anti-patterns like repetitive link text and estimates reading complexity.
-- **Navigation Engine**: Simulates keyboard interactions to detect focus traps and tab order issues.
+## Specialized Analysis Engines
 
-## Data Persistence
+AccessLens uses 7 distinct layers of analysis:
 
-- **Report Storage**: Uses **SQLite** for lightweight, persistent result storage.
-- **File Storage**: Stores screenshots and snapshots in the `/data` directory.
+| Engine | Strategy | Detection Scope |
+| :--- | :--- | :--- |
+| **WCAG** | Deterministic | Industry-standard `axe-core` violations. |
+| **Structural** | DOM-Traversing | Semantic landmarks, heading order, ARIA roles. |
+| **Contrast** | Computed CSS | Real-time color contrast in various interactive states. |
+| **Navigation** | Simulation | Tab-order logic, keyboard traps, focus indicators. |
+| **Form** | Validation | Label-input linking, error state focus, placeholder UX. |
+| **Heuristic** | Rule-Based | Link text quality, reading complexity, redundant attributes. |
+| **AI** | Multimodal | Contextual remediation using VLM vision pipelines. |
 
-## Design Patterns
+---
 
-- **Unified Issue Format**: All engines return a standardized `UnifiedIssue` object, simplifying the frontend consumption.
-- **Engine Plugin System**: New analysis engines can be added by implementing the `BaseEngine` interface.
-- **Async Execution**: Non-blocking I/O ensures the system can handle concurrent audit requests efficiently.
+## Data & Persistence
+
+- **SQLite**: Local relational storage for audit results and metric history.
+- **Redis (Optional)**: Used as a cache layer for task status and intermediate snapshots.
+- **Blob Storage**: Local `data/` folder stores compressed screenshots and AX-Tree JSONs.
+
+---
+
+## Testing and Quality
+The backend maintains a >90% coverage suite using `pytest-asyncio`, covering:
+- **Engine Accuracy**: Unit tests for every detection rule.
+- **Concurrency**: Stress-testing engine execution under load.
+---
+
+## Further Documentation
+To understand the backend in more detail, including file-by-file explanations and engine internals, please visit [backend/README.md](../backend/README.md).

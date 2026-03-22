@@ -8,13 +8,19 @@ WORKDIR /build
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 
-# Install dependencies into a specific directory for easy copying
-RUN pip install --no-cache-dir --prefix=/install --prefer-binary \
-    torch transformers accelerate sentencepiece Pillow numpy \
+# Install dependencies using CPU-only index for all Torch-related packages
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+RUN pip install --no-cache-dir --prefer-binary \
+    --timeout 1000 \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    torch torchvision torchaudio transformers accelerate sentencepiece Pillow numpy \
     -r requirements.txt
 
 # Stage 2: Runtime
@@ -23,15 +29,16 @@ FROM mcr.microsoft.com/playwright/python:v1.40.0-jammy
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV APP_HOME=/app
+ENV PATH="/opt/venv/bin:$PATH"
 ENV PYTHONPATH=$APP_HOME
 
 WORKDIR $APP_HOME
 
-# Copy installed dependencies from builder
-COPY --from=builder /install /usr/local
+# Copy virtualenv from builder
+COPY --from=builder /opt/venv /opt/venv
 
 # Install chromium (Playwright specific)
-RUN playwright install chromium
+RUN playwright install --with-deps chromium
 
 # Copy application code
 COPY . .

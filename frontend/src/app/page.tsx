@@ -25,6 +25,8 @@ import { motion } from 'framer-motion'
 import { AuditForm } from '@/components/audit/AuditForm'
 import { InteractiveGrid } from '@/components/ui/InteractiveGrid'
 import { MatrixRain } from '@/components/ui/MatrixRain'
+import Image from 'next/image'
+import logo from '../components/layout/logo.png'
 
 export default function HomePage() {
   const [url, setUrl] = useState('')
@@ -95,8 +97,8 @@ export default function HomePage() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-[#020617]/80 backdrop-blur-xl border-b border-white/5 h-20">
         <div className="container-custom h-full flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-brand-500 flex items-center justify-center">
-              <ShieldCheck size={20} className="text-white" />
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden">
+              <Image src={logo} alt="AccessLens Logo" className="w-full h-full object-contain" />
             </div>
             <span className="text-xl font-mono font-black tracking-tighter uppercase">ACCESSLENS</span>
           </div>
@@ -214,8 +216,8 @@ export default function HomePage() {
       <footer className="relative z-10 pb-20 pt-40 container-custom">
          <div className="flex flex-col md:flex-row justify-between items-center gap-10">
            <div className="flex items-center gap-2 opacity-30">
-             <div className="w-6 h-6 rounded bg-white p-1">
-               <ShieldCheck className="text-slate-950 w-full h-full" />
+             <div className="w-6 h-6 rounded overflow-hidden">
+               <Image src={logo} alt="AccessLens Logo" className="w-full h-full object-contain grayscale" />
              </div>
              <span className="text-sm font-black tracking-widest uppercase">ACCESSLENS Protocol</span>
            </div>

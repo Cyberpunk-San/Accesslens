@@ -14,6 +14,8 @@ import {
 } from '@heroicons/react/24/outline';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import Image from 'next/image';
+import logo from './logo.png';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -41,8 +43,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         <div className="fixed inset-y-0 left-0 flex w-full max-w-xs flex-col bg-background/95 backdrop-blur-xl border-r border-white/10 p-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="premium-gradient p-1.5 rounded-lg">
-                <ShieldCheckIcon className="h-6 w-6 text-white" />
+              <div className="p-1 rounded-lg">
+                <Image src={logo} alt="AccessLens Logo" className="h-8 w-8 object-contain" />
               </div>
               <span className="text-xl font-bold tracking-tight">AccessLens</span>
             </div>
@@ -76,8 +78,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       {/* Desktop sidebar */}
       <div className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-64 lg:flex-col lg:border-r lg:border-white/10 lg:bg-background/40 lg:backdrop-blur-3xl">
         <div className="flex h-16 shrink-0 items-center gap-2 px-6">
-          <div className="premium-gradient p-1.5 rounded-lg">
-            <ShieldCheckIcon className="h-6 w-6 text-white" />
+          <div className="p-1 rounded-lg">
+            <Image src={logo} alt="AccessLens Logo" className="h-8 w-8 object-contain" />
           </div>
           <span className="text-xl font-bold tracking-tight">AccessLens</span>
         </div>

@@ -1,6 +1,6 @@
 # AccessLens Backend — Full Documentation
 
-AccessLens is a web accessibility auditing API. It uses a six-layer engine pipeline, a headless browser (Playwright/Chromium), and an optional AI layer to detect and report accessibility issues on any public URL. The backend is a FastAPI application backed by SQLite and optionally Redis for caching.
+AccessLens is a web accessibility auditing API. It uses a seven-layer engine pipeline, a headless browser (Playwright/Chromium), and an optional AI layer to detect and report accessibility issues on any public URL. The backend is a FastAPI application backed by SQLite and optionally Redis for caching.
 
 ---
 
@@ -64,8 +64,6 @@ backend/
 | `.coveragerc` | Code coverage reporting configuration |
 | `API.md` | REST endpoint reference |
 | `ARCHITECTURE.md` | High-level system architecture notes |
-| `CHANGELOG.md` | Version history |
-| `CONTRIBUTING.md` | Contribution guidelines |
 
 ---
 
@@ -74,7 +72,7 @@ backend/
 ### `app/main.py`
 FastAPI application factory. Defines the `lifespan` context manager that:
 1. Initialises the cache, browser, rate limiter, and report storage
-2. Registers all six engines with their aliases into `EngineRegistry`
+2. Registers all seven engines with their aliases into `EngineRegistry`
 3. Mounts CORS, rate limiting, Prometheus metrics, and security-header middleware
 4. Registers the `/api/v1` router
 
@@ -135,7 +133,7 @@ Each engine inherits from `BaseAccessibilityEngine` and implements `async analyz
 | `form_engine.py` | `form_engine` | Validates form accessibility: missing `<label>` associations, placeholder-as-label misuse, error messages not linked via `aria-describedby`. |
 | `heuristic_engine.py` | `heuristic` | UX heuristics: repetitive/generic link text ("click here"), reading complexity score, redundant `title` attributes. |
 | `navigation_engine.py` | `navigation` | Simulates keyboard navigation: Tab traversal order, focus trap detection, focus indicator presence. |
-| `ai_engine.py` | `ai_engine` | Optional AI overlay — sends screenshot + accessibility tree to a local LLaVA or Mistral model for contextual issue discovery. |
+| `ai_engine.py` | `ai_engine` | The adaptive intelligence layer. It implements a multimodal pipeline: (1) **Vision Analysis (LLaVA)**: Uses screenshots to detect visual clutter, UI overlaps, and non-text elements embedded in graphics. (2) **Code Fixes (Mistral)**: Generates localized HTML/ARIA replacement blocks based on the surrounding DOM context. (3) **Quality Heuristics**: Analyzes the semantic meaning of alt-text (detecting vague terms like 'logo' or 'image') and evaluates content density ($total\_elements / viewport$). Includes a **Self-Doubt Filter** to prune hallucinations and malformed AI outputs. |
 | `accessibility_structure_engine.py` | Utility | Lightweight helper for structural node analysis (used internally). |
 | `__init__.py` | — | Exports all engine classes. |
 
@@ -209,13 +207,13 @@ SQL migration files for the SQLite schema (applied manually or via `scripts/run_
 | File | Purpose |
 |---|---|
 | `docker-entrypoint.sh` | Container startup script — creates `/app/data`, `/app/models`, `/app/logs`, runs DB setup, then launches the app |
-| `setup.sh` | Local environment setup — creates virtualenv, installs deps, installs Playwright |
-| `dev.sh` | Starts the dev server with hot-reload |
-| `cleanup.sh` | Removes build artifacts, `__pycache__`, `.pytest_cache` |
+| `scripts/setup.sh` | Local environment setup — creates virtualenv, installs deps, installs Playwright |
+| `scripts/dev.sh` | Starts the dev server with hot-reload |
+| `scripts/cleanup.sh` | Removes build artifacts, `__pycache__`, `.pytest_cache` |
 | `setup_db.py` | Creates the SQLite database and runs the migration files |
 | `run_migrations.py` | Applies pending SQL migration files |
 | `download_models.py` | Downloads LLaVA / Mistral 7B model weights |
-| `download_models.sh` | Shell wrapper around `download_models.py` |
+| `scripts/download_models.sh` | Shell wrapper around `download_models.py` |
 | `backup_db.py` | Creates a timestamped backup of `accesslens.db` |
 | `restore_db.py` | Restores a database from a backup file |
 | `cleanup_reports.py` | Purges old audit reports older than a configurable age |
@@ -288,12 +286,13 @@ AuditOrchestrator.run_audit()
     │           └─► Playwright Chromium → Page
     │
     ├─► Engine Pipeline (parallel)
-    │       ├─ WCAGEngine        (axe-core)
-    │       ├─ StructuralEngine  (DOM semantic analysis)
-    │       ├─ ContrastEngine    (colour contrast)
-    │       ├─ FormEngine        (label & error associations)
-    │       ├─ HeuristicEngine   (UX patterns)
-    │       └─ NavigationEngine  (keyboard simulation)
+    │       ├─ `WCAGEngine`        (axe-core)
+    │       ├─ `StructuralEngine`  (DOM semantic analysis)
+    │       ├─ `ContrastEngine`    (colour contrast)
+    │       ├─ `FormEngine`        (label & error associations)
+    │       ├─ `HeuristicEngine`   (UX patterns)
+    │       ├─ `NavigationEngine`  (keyboard simulation)
+    │       └─ `AIEngine`          (contextual AI)
     │
     ├─► Issue Aggregation → AuditReport
     │
