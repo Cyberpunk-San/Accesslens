@@ -1,2 +1,32 @@
-./backend/node_modules
-./backend/dist
+# Core API
+backend/node_modules/
+backend/dist/
+backend/venv/
+backend/.pytest_cache/
+backend/__pycache__/
+backend/data/
+backend/models/
+backend/logs/
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Development Jars and Metadata
+.vscode/
+.idea/
+*.swp
+*.bak
+.DS_Store
+
+# Testing and Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+coverage.xml
+
+# Environment
+.env
+.env.local
