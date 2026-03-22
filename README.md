@@ -126,7 +126,11 @@ For deep-dive documentation on specific system components, visit the [Documentat
 - [Setup & Deployment](./docs/SETUP.md)
 
 ---
+##  Live Demo
 
+- Frontend: https://accesslens-azure.vercel.app/
+- Backend API: https://sansritimishra-accesslens-backend.hf.space/
+---
 ## Quick Start
 
 1. **Clone**: `git clone https://github.com/Upanshi-Mittal/Accesslens`
