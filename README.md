@@ -1,6 +1,6 @@
-# AccessLens: AI-Powered Accessibility Auditing
+# AccessLens
 
-An automated platform for identifying and remediating accessibility barriers through multi-engine orchestration and computer vision.
+*Bridges the gap between valid code and usable design by detecting real-world accessibility issues and generating fixes.*
 
 ---
 
