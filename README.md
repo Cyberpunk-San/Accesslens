@@ -38,17 +38,57 @@ Powered by **Mistral 7B**, the remediation engine converts detected violations i
 
 ---
 
-## Technical Architecture
+## System Architecture
+
+AccessLens follows a modular, layer-driven architecture designed for high-concurrency auditing and AI synthesis.
 
 ```mermaid
-graph TD
-    User([URL Input]) -->|Next.js HUD| Backend[FastAPI Orchestrator]
-    Backend -->|Playwright| Crawler[Headless Browser Engine]
-    Crawler -->|Full DOM Extract| Structural[Axe-Core & Heuristics]
-    Crawler -->|Viewport Render| Vision[LLaVA Vision Model]
-    Structural & Vision -->|Issue Matrix| AI_Brain[Mistral-7B LLM]
-    AI_Brain -->|Code Synthesis| Results[Remediation HUD]
-    Results -->|Export| Dev([Developer Workflow])
+graph TB
+    subgraph Client_Layer [Client Layer]
+        HUD[Cyber-HUD Dashboard]
+        UX[Next.js / Framer Motion]
+    end
+
+    subgraph Service_Orchestration [Service & Orchestration]
+        API[FastAPI Orchestrator]
+        Reg[Engine Registry]
+        Browser[Headless Browser Engine]
+        
+        subgraph Analysis_Engines [The 7 Layers of Analysis]
+            WCAG[1. WCAG Deterministic]
+            STR[2. Structural Landmark]
+            CON[3. Contrast Correlation]
+            NAV[4. Keyboard Navigation]
+            FORM[5. Form Validation]
+            HEUR[6. UX Heuristic]
+            AI_E[7. AI Perceptual]
+        end
+    end
+
+    subgraph Intelligence_Layer [Intelligence & Inference]
+        LLAVA[LLaVA / Vision]
+        MISTRAL[Mistral 7B / Code Fixes]
+    end
+
+    subgraph Persistence_Layer [Data & Infrastructure]
+        REDIS[(Redis Cache / State)]
+        SQLITE[(SQLite / Reports)]
+    end
+
+    HUD <-->|REST API| API
+    API -->|Load| Reg
+    API -->|Control| Browser
+    
+    Browser -->|Viewport Render| LLAVA
+    Browser -->|DOM Tree| Reg
+    
+    Reg -->|Execution| Analysis_Engines
+    AI_E <-->|Context| LLAVA
+    Analysis_Engines -->|Matrix| MISTRAL
+    MISTRAL -->|Patches| API
+    
+    API <--> REDIS
+    API <--> SQLITE
 ```
 
 ---
