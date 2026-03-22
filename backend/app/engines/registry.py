@@ -14,8 +14,7 @@ class EngineRegistry:
 
         if engine.name in self._engines:
             self._logger.warning(f"Engine {engine.name} already registered. Overwriting.")
-            return
-
+        
         self._engines[engine.name] = engine
         self._logger.debug(f"Registered engine: {engine.name} v{engine.version}")
 

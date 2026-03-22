@@ -45,8 +45,13 @@ async def test_list_engines():
     assert len(engines) >= 3
 
 
+    wcag_engine = next((e for e in engines if e["internal_name"] == "wcag_deterministic"), None)
+    assert wcag_engine is not None
+    assert wcag_engine["name"] == "wcag"
+
     for engine in engines:
         assert "name" in engine
+        assert "internal_name" in engine
         assert "version" in engine
         assert "capabilities" in engine
 
@@ -58,7 +63,7 @@ async def test_start_audit():
             "/api/v1/audit",
             json={
                 "url": "https://example.com",
-                "engines": ["wcag_deterministic"],
+                "engines": ["wcag"],  
                 "enable_ai": False
             }
         )
