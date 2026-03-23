@@ -4,6 +4,7 @@ from playwright.async_api import Page
 import asyncio
 import json
 import logging
+from ..utils.shadow_dom import get_shadow_piercing_script
 
 class AccessibilityTreeExtractor:
 
@@ -64,25 +65,35 @@ class AccessibilityTreeExtractor:
             return {"error": str(e)}
 
     async def _get_full_accessibility_tree(self, page: Page) -> Dict[str, Any]:
-
         try:
+            # Check if accessibility attribute exists (handles potential mock objects in tests)
+            if not hasattr(page, 'accessibility'):
+                self._logger.debug("Page object missing 'accessibility' attribute, falling back to CDP")
+                return await self._get_full_accessibility_tree_cdp(page)
+                
+            snapshot = await page.accessibility.snapshot()
+            
+            return {
+                "nodes": [snapshot] if snapshot else [],
+                "node_count": self._count_nodes(snapshot) if snapshot else 0,
+                "method": "playwright_native"
+            }
+        except Exception as e:
+            self._logger.warning(f"Native accessibility snapshot failed: {e}")
+            return await self._get_full_accessibility_tree_cdp(page)
 
+    async def _get_full_accessibility_tree_cdp(self, page: Page) -> Dict[str, Any]:
+        try:
             client = await page.context.new_cdp_session(page)
             await client.send("Accessibility.enable")
-
-
             result = await client.send("Accessibility.getFullAXTree")
-
-
             tree = self._normalize_accessibility_nodes(result.get("nodes", []))
-
             return {
                 "nodes": tree,
                 "node_count": len(tree)
             }
         except Exception as e:
             self._logger.warning(f"CDP accessibility tree failed: {e}")
-
             return await self._extract_accessibility_tree_js(page)
 
     async def _extract_accessibility_tree_js(self, page: Page) -> Dict[str, Any]:
@@ -150,22 +161,21 @@ class AccessibilityTreeExtractor:
         return count
 
     async def _get_computed_styles(self, page: Page) -> Dict[str, Any]:
-
-        js_code = """
-        () => {
-            const styles = {};
-            const elements = document.querySelectorAll('*');
-            elements.forEach(el => {
+        js_code = f"""
+        () => {{
+            {get_shadow_piercing_script()}
+            const styles = {{}};
+            const elements = window._accessLensPierce(document, '*');
+            elements.forEach(el => {{
                 const computed = window.getComputedStyle(el);
-                styles[el.tagName] = {
+                styles[el.tagName] = {{
                     color: computed.color,
                     backgroundColor: computed.backgroundColor
-                };
-            });
+                }}
+            }});
             return styles;
-        }
+        }}
         """
-
         try:
             return await page.evaluate(js_code)
         except Exception as e:
@@ -189,20 +199,20 @@ class AccessibilityTreeExtractor:
             return {}
 
     async def _get_aria_information(self, page: Page) -> Dict[str, Any]:
-
-        js_code = """
-        () => {
-            return Array.from(document.querySelectorAll('*'))
+        js_code = f"""
+        () => {{
+            {get_shadow_piercing_script()}
+            return window._accessLensPierce(document, '*')
                 .filter(el => Array.from(el.attributes).some(attr => attr.name.startsWith('aria-')))
-                .map(el => ({
+                .map(el => ({{
                     tag: el.tagName.toLowerCase(),
+                    selector: window._accessLensGetSelector(el),
                     attributes: Array.from(el.attributes)
                         .filter(attr => attr.name.startsWith('aria-'))
-                        .reduce((acc, attr) => ({ ...acc, [attr.name]: attr.value }), {})
-                }));
-        }
+                        .reduce((acc, attr) => ({{ ...acc, [attr.name]: attr.value }}), {{}})
+                }}));
+        }}
         """
-
         try:
             return await page.evaluate(js_code)
         except Exception as e:
@@ -210,24 +220,21 @@ class AccessibilityTreeExtractor:
             return []
 
     async def _get_heading_structure(self, page: Page) -> List[Dict[str, Any]]:
-
-        js_code = """
-        () => {
-            return Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, h6, [role="heading"]'))
-                .map(el => ({
+        js_code = f"""
+        () => {{
+            {get_shadow_piercing_script()}
+            return window._accessLensPierce(document, 'h1, h2, h3, h4, h5, h6, [role="heading"]')
+                .map(el => ({{
                     level: parseInt(el.tagName.substring(1)) || parseInt(el.getAttribute('aria-level')) || 2,
                     text: el.innerText.trim(),
-                    isVisible: el.offsetParent !== null
-                }));
-        }
+                    selector: window._accessLensGetSelector(el),
+                    isVisible: !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length)
+                }}));
+        }}
         """
-
         try:
             headings = await page.evaluate(js_code)
-
-
             hierarchy_issues = self._analyze_heading_hierarchy(headings)
-
             return {
                 "headings": headings,
                 "count": len(headings),
@@ -270,25 +277,24 @@ class AccessibilityTreeExtractor:
         return issues
 
     async def _get_landmark_regions(self, page: Page) -> List[Dict[str, Any]]:
-
-        js_code = """
-        () => {
+        js_code = f"""
+        () => {{
+            {get_shadow_piercing_script()}
             const roles = ['main', 'nav', 'header', 'footer', 'aside', 'section', 'article', 'form', 'search'];
-            return Array.from(document.querySelectorAll(roles.map(r => `[role="${r}"], ${r}`).join(',')))
-                .map(el => ({
+            const selector = roles.map(r => `[role="${{r}}"], ${{r}}`).join(',');
+            return window._accessLensPierce(document, selector)
+                .filter(el => roles.includes(el.getAttribute('role')) || roles.includes(el.tagName.toLowerCase()))
+                .map(el => ({{
                     role: el.getAttribute('role') || el.tagName.toLowerCase(),
                     label: el.getAttribute('aria-label'),
-                    labelledby: el.getAttribute('aria-labelledby')
-                }));
-        }
+                    labelledby: el.getAttribute('aria-labelledby'),
+                    selector: window._accessLensGetSelector(el)
+                }}));
+        }}
         """
-
         try:
             landmarks = await page.evaluate(js_code)
-
-
             issues = self._analyze_landmarks(landmarks)
-
             return {
                 "landmarks": landmarks,
                 "count": len(landmarks),
@@ -337,18 +343,18 @@ class AccessibilityTreeExtractor:
         return issues
 
     async def _get_focusable_elements(self, page: Page) -> List[Dict[str, Any]]:
-
-        js_code = """
-        () => {
-            return Array.from(document.querySelectorAll('a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])'))
-                .map(el => ({
+        js_code = f"""
+        () => {{
+            {get_shadow_piercing_script()}
+            return window._accessLensPierce(document, 'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])')
+                .map(el => ({{
                     tag: el.tagName.toLowerCase(),
                     text: el.innerText.trim() || el.value || '',
-                    role: el.getAttribute('role')
-                }));
-        }
+                    role: el.getAttribute('role'),
+                    selector: window._accessLensGetSelector(el)
+                }}));
+        }}
         """
-
         try:
             return await page.evaluate(js_code)
         except Exception as e:
@@ -356,21 +362,38 @@ class AccessibilityTreeExtractor:
             return []
 
     async def _compute_statistics(self, page: Page, structure: Dict) -> Dict[str, Any]:
-
         try:
-
-            total_elements = await page.evaluate('document.querySelectorAll("*").length')
-
-
-            image_stats = await page.evaluate("() => { const imgs = Array.from(document.images); return { total: imgs.length, with_alt: imgs.filter(i => i.alt).length, without_alt: imgs.filter(i => !i.alt).length }; }")
-
-
-            form_stats = await page.evaluate("() => { const forms = Array.from(document.forms); return { total: forms.length, with_label: Array.from(document.querySelectorAll('input, select, textarea')).filter(i => i.labels && i.labels.length > 0).length }; }")
+            js_code = """
+            () => {
+                {{SHADOW_PIERCING_SCRIPT}}
+                const allElements = window._accessLensPierce(document, '*');
+                const mainElements = document.querySelectorAll('*');
+                const imgs = window._accessLensPierce(document, 'img');
+                const inputs = window._accessLensPierce(document, 'input, select, textarea');
+                const forms = window._accessLensPierce(document, 'form');
+                
+                return {
+                    total_elements: allElements.length,
+                    shadow_elements: allElements.length - mainElements.length,
+                    images: {
+                        total: imgs.length,
+                        with_alt: imgs.filter(i => i.alt).length,
+                        without_alt: imgs.filter(i => !i.alt).length
+                    },
+                    forms: {
+                        total: forms.length,
+                        with_label: inputs.filter(i => i.labels && i.labels.length > 0).length
+                    }
+                };
+            }
+            """
+            stats = await page.evaluate(js_code.replace('{{SHADOW_PIERCING_SCRIPT}}', get_shadow_piercing_script()))
 
             return {
-                "total_elements": total_elements,
-                "images": image_stats,
-                "forms": form_stats,
+                "total_elements": stats["total_elements"],
+                "shadow_elements": stats["shadow_elements"],
+                "images": stats["images"],
+                "forms": stats["forms"],
                 "headings": len(structure.get("headings", {}).get("headings", [])),
                 "landmarks": len(structure.get("landmarks", {}).get("landmarks", [])),
                 "focusable_elements": len(structure.get("focusable_elements", []))

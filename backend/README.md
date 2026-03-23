@@ -35,7 +35,8 @@ backend/
 │   ├── middleware/             # Rate limiting middleware
 │   ├── models/                 # Pydantic schemas
 │   ├── services/               # External service helpers
-│   └── utils/                  # Shared utilities
+│   ├── static/                 # Static assets (Cyber HUD splash)
+│   └── utils/                  # Shared utilities (Shadow DOM piercing...)
 ├── migrations/                 # SQL schema migrations
 ├── scripts/                    # DevOps & maintenance scripts
 ├── tests/                      # Automated test suite
@@ -108,7 +109,7 @@ FastAPI application factory. Defines the `lifespan` context manager that:
 | `page_controller.py` | Navigates a browser page to a URL, waits for load, captures screenshot and accessibility tree. Page ownership transfers to `AuditOrchestrator`. |
 | `audit_orchestrator.py` | Core audit pipeline — fetches a page, runs all requested engines in parallel (`_run_engine_safe`), aggregates issues, builds `AuditReport`. Releases the browser page in `finally`. |
 | `report_storage.py` | Async SQLite persistence using `aiosqlite`. Tables: `reports`, `issues`. Provides `save_report`, `get_report`, `list_reports`. Falls back to in-memory store on error. |
-| `accessibility_tree.py` | Extracts the browser's native accessibility tree via Playwright's `accessibility.snapshot()`. Normalises it into a structured dict for engine consumption. |
+| `accessibility_tree.py` | Extracts the browser's native accessibility tree via Playwright's `accessibility.snapshot()`. Also includes **Shadow DOM piercing** to extract nodes inside encapsulated roots. |
 | `scoring.py` | `ConfidenceCalculator` — computes per-issue confidence scores from detection reliability, context clarity, and evidence quality weights. |
 | `color_utils.py` | Colour math utilities — luminance, contrast ratio (WCAG 2.1 formula), hex/RGB parsing. Used by `ContrastEngine`. |
 | `heading_analyzer.py` | Analyses heading hierarchy extracted from the DOM — detects skipped levels and multiple `<h1>` elements. |
@@ -133,7 +134,7 @@ Each engine inherits from `BaseAccessibilityEngine` and implements `async analyz
 | `form_engine.py` | `form_engine` | Validates form accessibility: missing `<label>` associations, placeholder-as-label misuse, error messages not linked via `aria-describedby`. |
 | `heuristic_engine.py` | `heuristic` | UX heuristics: repetitive/generic link text ("click here"), reading complexity score, redundant `title` attributes. |
 | `navigation_engine.py` | `navigation` | Simulates keyboard navigation: Tab traversal order, focus trap detection, focus indicator presence. |
-| `ai_engine.py` | `ai_engine` | The adaptive intelligence layer. It implements a multimodal pipeline: (1) **Vision Analysis (LLaVA)**: Uses screenshots to detect visual clutter, UI overlaps, and non-text elements embedded in graphics. (2) **Code Fixes (Mistral)**: Generates localized HTML/ARIA replacement blocks based on the surrounding DOM context. (3) **Quality Heuristics**: Analyzes the semantic meaning of alt-text (detecting vague terms like 'logo' or 'image') and evaluates content density ($total\_elements / viewport$). Includes a **Self-Doubt Filter** to prune hallucinations and malformed AI outputs. |
+| `ai_engine.py` | `ai_engine` | The adaptive intelligence layer. It implements a multimodal pipeline: (1) **Vision Analysis (LLaVA)**: Uses screenshots to detect visual clutter, UI overlaps, and non-text elements embedded in graphics. (2) **Code Fixes (Mistral)**: Generates localized HTML/ARIA replacement blocks based on the surrounding DOM context. (3) **Quality Heuristics**: Analyzes the semantic meaning of alt-text (detecting vague terms like 'logo' or 'image') and evaluates content density. (4) **Contextual Audit**: Detects ambiguous labels ("click here"), repetitive interactive content, and ensures UX best practices for complex layouts. Includes a **Self-Doubt Filter** to prune hallucinations. |
 | `accessibility_structure_engine.py` | Utility | Lightweight helper for structural node analysis (used internally). |
 | `__init__.py` | — | Exports all engine classes. |
 
@@ -176,6 +177,7 @@ Each engine inherits from `BaseAccessibilityEngine` and implements `async analyz
 | `validators.py` | `is_valid_url` — validates URLs against blocklists (private IPs, localhost, unsafe schemes) before auditing. |
 | `helpers.py` | General helper functions: text truncation, duration formatting, severity normalisation, JSON sanitisation. |
 | `tree_traversal.py` | Utilities for traversing nested accessibility tree structures. |
+| `shadow_dom.py` | **Shadow DOM Piercing Scripts** — provides recursive JavaScript functions used by the tree extractor and AI engines to audit elements inside shadow roots. |
 | `__init__.py` | Package exports |
 
 ---
@@ -186,6 +188,14 @@ Each engine inherits from `BaseAccessibilityEngine` and implements `async analyz
 |---|---|
 | `tree_extractor.py` | Helper service that wraps `AccessibilityTreeExtractor` for use outside the core module. |
 | `__init__.py` | Package init |
+
+---
+
+## `app/static/` — Static Assets
+
+| File | Purpose |
+|---|---|
+| `index.html` | The **Cyber HUD Splash Page** — a high-impact, themed landing page served at the root URL (`/`) using Glassmorphism and CSS animations. |
 
 ---
 
@@ -251,6 +261,7 @@ Tests use `pytest` + `pytest-asyncio`. The FastAPI app is tested via `httpx.Asyn
 | `test_color_utils_more.py` | Extended colour utility coverage |
 | `test_helpers_coverage.py` | Helper function coverage |
 | `test_accessibility_structure.py` | Accessibility tree structure validation |
+| `test_shadow_dom_integration.py` | **Shadow DOM Piercing Verification** — ensures the pipeline can audit complex sites (like YouTube) that use heavy encapsulation. |
 
 ---
 

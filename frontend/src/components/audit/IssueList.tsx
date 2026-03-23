@@ -1,19 +1,47 @@
 'use client';
 
-import { UnifiedIssue } from '@/lib/types';
+import { UnifiedIssue, AuditSummary } from '@/lib/types';
 import { IssueCard } from './IssueCard';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search } from 'lucide-react';
+import { Search, AlertTriangle } from 'lucide-react';
 
 interface IssueListProps {
   issues: UnifiedIssue[];
+  summary?: AuditSummary;
   filter?: (issue: UnifiedIssue) => boolean;
 }
 
-export function IssueList({ issues, filter }: IssueListProps) {
+export function IssueList({ issues, summary, filter }: IssueListProps) {
   const filteredIssues = filter ? issues.filter(filter) : issues;
 
-  // Grouping logic: Group by issue_type and severity to reduce visual noise
+  // Handle Error State
+  if (summary?.error || (summary?.score === 0 && issues.length === 0)) {
+    return (
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="text-center py-20 glass-card bg-rose-500/5 border-rose-500/20"
+      >
+        <div className="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center text-rose-500 mx-auto mb-6">
+          <AlertTriangle size={32} />
+        </div>
+        <h3 className="text-xl font-bold text-white mb-2">Audit Interrupted</h3>
+        <p className="text-slate-400 font-medium max-w-sm mx-auto mb-6">
+          {summary?.error || "An unexpected error occurred during analysis. The target host might be unreachable."}
+        </p>
+        <div className="p-4 bg-slate-900/50 rounded-2xl border border-white/5 text-left inline-block">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Troubleshooting Node</p>
+          <ul className="text-xs text-slate-400 space-y-2 font-bold">
+            <li>• Ensure the URL is accessible from the backend container.</li>
+            <li>• Use container names (e.g., accesslens-frontend) instead of localhost in Docker.</li>
+            <li>• Check if the site blocks headless browser traffic.</li>
+          </ul>
+        </div>
+      </motion.div>
+    );
+  }
+
+  // Grouping logic
   const groupedIssues = filteredIssues.reduce((acc, issue) => {
     const key = `${issue.issue_type}-${issue.severity}`;
     if (!acc[key]) {

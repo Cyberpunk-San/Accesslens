@@ -13,18 +13,7 @@ Returns basic API metadata and available endpoint groups.
 **Path:** `/`
 
 #### Response Sample
-```json
-{
-  "name": "AccessLens API",
-  "version": "1.0.0",
-  "documentation": "/docs",
-  "endpoints": {
-    "health": "/health",
-    "metrics": "/metrics",
-    "api_v1": "/api/v1"
-  }
-}
-```
+(Serves `text/html` index page)
 
 ---
 

@@ -129,6 +129,7 @@ class Settings(BaseSettings):
 
     # Security
     cors_origins: str = Field("http://localhost:3000", alias="CORS_ORIGINS")
+    allow_private_audits: bool = Field(False, alias="ALLOW_PRIVATE_AUDITS")
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -247,14 +247,20 @@ export function HeatmapOverlay({ issues, screenshot, viewportWidth = 1280 }: Hea
             )}
           </AnimatePresence>
 
-          {/* Enhanced Hover Portal */}
+          {/* Enhanced Hover Portal - Positioned beside the point */}
           <AnimatePresence mode="wait">
             {hoveredCluster && (
               <motion.div
-                initial={{ opacity: 0, y: 30, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 30, scale: 0.95 }}
-                className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[200] w-[450px] glass-card p-1 pb-1 shadow-[0_0_60px_rgba(0,0,0,0.8)] overflow-hidden"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="absolute z-[200] w-[380px] glass-card p-1 pb-1 shadow-[0_0_60px_rgba(0,0,0,0.8)] overflow-hidden pointer-events-none"
+                style={{
+                  left: (hoveredCluster.x / viewportWidth) * 100 > 70 
+                    ? `calc(${(hoveredCluster.x / viewportWidth) * 100}% - 400px)` 
+                    : `calc(${(hoveredCluster.x / viewportWidth) * 100}% + 40px)`,
+                  top: `${hoveredCluster.y - 100}px`
+                }}
               >
                 <div className={`h-1.5 w-full ${
                   hoveredCluster.severity === 'critical' ? 'bg-rose-500' :
@@ -287,7 +293,7 @@ export function HeatmapOverlay({ issues, screenshot, viewportWidth = 1280 }: Hea
                   <div className="bg-slate-900/40 p-4 rounded-xl border border-white/5 space-y-3">
                     {hoveredCluster.issues.slice(0, 3).map((issue, idx) => (
                       <div key={issue.id} className="flex items-center justify-between text-[10px] font-bold">
-                        <span className="text-slate-300 truncate max-w-[300px]">{issue.title}</span>
+                        <span className="text-slate-300 truncate max-w-[200px]">{issue.title}</span>
                         <span className="text-slate-600 font-mono">#{idx + 1}</span>
                       </div>
                     ))}

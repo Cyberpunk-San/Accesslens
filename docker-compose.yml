@@ -17,6 +17,7 @@ services:
       - LOG_LEVEL=INFO
       - JSON_LOGS=true
       - CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+      - ALLOW_PRIVATE_AUDITS=true
     volumes:
       - ./backend/data:/app/data
       - ./backend/models:/app/models

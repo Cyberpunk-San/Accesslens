@@ -57,6 +57,7 @@ class PageController:
 
             metrics = await self._get_page_metrics(page)
             accessibility_data["metrics"] = metrics
+            accessibility_data["page"] = page
 
             return accessibility_data
 
@@ -221,9 +222,6 @@ class PageController:
                 if ip_addr.is_private or ip_addr.is_loopback or ip_addr.is_link_local:
                     return False
             except ValueError:
-                # Not an IP address, probably a hostname. 
-                # In a real production environment, we'd also resolve the hostname 
-                # and check the resolved IP, but for now this is a good first layer.
                 pass
                 
             return True

@@ -138,5 +138,19 @@ For deep-dive documentation on specific system components, visit the [Documentat
 3. **Analyze**: Access the dashboard at `http://localhost:3000`
 
 ---
+## Environment Fidelity & Security Sandbox
+
+### Cloud vs. Local Execution
+AccessLens performance and reach depend on the network environment:
+
+*   **Cloud Demo (Hugging Face)**: Operates under strict SSRF Security Protocols. Requests to certain high-complexity or internal-cluster domains (e.g., YouTube, HuggingFace.co) may be blocked by cloud-provider firewalls or DNS filters to prevent scraping abuse.
+*   **Local Engine (Recommended)**: For full-depth audits of Shadow DOM-heavy sites, run the project locally. The local engine is unthrottled and provides the highest fidelity results.
+
+#### High-Complexity Audit Samples
+| Hugging Face (Cloud Analysis) | YouTube (Local Shadow DOM Piercing) |
+| :---: | :---: |
+| ![Hugging Face Audit](https://github.com/Upanshi-Mittal/Accesslens/blob/main/docs/images/hg.jpeg?raw=true) | ![YouTube Audit](https://github.com/Upanshi-Mittal/Accesslens/blob/main/docs/images/yt.jpeg?raw=true) |
+
+---
 
 ### [License](./LICENSE) | [Code of Conduct](./CODE_OF_CONDUCT.md) | [Security](./SECURITY.md)

@@ -26,7 +26,7 @@ async def test_health_check():
 async def test_root_endpoint():
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        response = await ac.get("/")
+        response = await ac.get("/api/v1/")
 
     assert response.status_code == 200
     data = response.json()

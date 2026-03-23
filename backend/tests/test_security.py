@@ -5,12 +5,15 @@ from app.core.config import settings
 
 @pytest.fixture
 def enforce_production_security():
-    """Ensure debug is False so SSRF protection is fully active."""
+    """Ensure debug and private audits are False so SSRF protection is fully active."""
     original_debug = settings.debug
+    original_allow_private = settings.allow_private_audits
     settings.debug = False
-    settings.testing = True # Ensure rate limiting is still bypassed
+    settings.allow_private_audits = False
+    settings.testing = True
     yield settings
     settings.debug = original_debug
+    settings.allow_private_audits = original_allow_private
 
 @pytest.mark.asyncio
 async def test_ssrf_protection_blocks_localhost(enforce_production_security):
@@ -73,4 +76,19 @@ async def test_ssrf_protection_allows_valid_public_urls(enforce_production_secur
         )
         # Should not get 422. Might get 200 indicating audit started.
         assert response.status_code == 200
+@pytest.mark.asyncio
+async def test_ssrf_bypass_with_allow_private_audits(enforce_production_security):
+    """Verify that private network audits are allowed when ALLOW_PRIVATE_AUDITS is True."""
+    settings.allow_private_audits = True
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        
+        response = await client.post(
+            "/api/v1/audit",
+            json={"url": "http://localhost:8080/admin"}
+        )
+        assert response.status_code == 200
         assert "audit_id" in response.json()
+    
+    settings.allow_private_audits = False

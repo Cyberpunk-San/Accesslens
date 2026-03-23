@@ -12,6 +12,7 @@ from ..core.heading_analyzer import HeadingHierarchyAnalyzer
 from ..core.landmark_validator import LandmarkValidator
 from ..core.scoring import ConfidenceCalculator
 from ..core.config import settings
+from ..utils.shadow_dom import get_shadow_piercing_script, get_query_elements_script
 
 class StructuralEngine(BaseAccessibilityEngine):
 
@@ -39,7 +40,7 @@ class StructuralEngine(BaseAccessibilityEngine):
             issues.extend(lang_issues)
 
             # 2. Headings Analysis (Point 1)
-            headings = await self._extract_headings(page, accessibility_tree)
+            headings = await self._extract_headings(page, page_data)
             if headings:
                 heading_analysis = self.heading_analyzer.analyze(headings)
                 heading_issues = await self._convert_heading_issues(heading_analysis.get("issues", []))
@@ -48,7 +49,7 @@ class StructuralEngine(BaseAccessibilityEngine):
                     page_data["heading_outline"] = heading_analysis["outline"]
 
             # 3. Landmarks Analysis
-            landmarks = await self._extract_landmarks(page, accessibility_tree)
+            landmarks = await self._extract_landmarks(page, page_data)
             if landmarks:
                 landmark_analysis = self.landmark_validator.validate(landmarks)
                 landmark_issues = await self._convert_landmark_issues(landmark_analysis.get("issues", []))
@@ -61,7 +62,7 @@ class StructuralEngine(BaseAccessibilityEngine):
             issues.extend(outline_issues)
 
             # 5. Semantic Structure Checks
-            semantic_issues = await self._analyze_semantic_structure(page, accessibility_tree)
+            semantic_issues = await self._analyze_semantic_structure(page, page_data)
             issues.extend(semantic_issues)
 
             # 6. Navigation Analysis (Points 13, 14, 15)
@@ -81,48 +82,39 @@ class StructuralEngine(BaseAccessibilityEngine):
             self._logger.error(f"Structural analysis failed: {e}")
             return []
 
-    async def _extract_headings(self, page: Page, accessibility_tree: Dict[str, Any]) -> List[Dict[str, Any]]:
-        if accessibility_tree.get("structure", {}).get("headings"):
-            headings_data = accessibility_tree["structure"]["headings"]
+    async def _extract_headings(self, page: Page, page_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        # Try to use pre-extracted structure from AccessibilityTreeExtractor first
+        structure = page_data.get("structure", {})
+        if structure and structure.get("headings"):
+            headings_data = structure["headings"]
             if isinstance(headings_data, dict) and headings_data.get("headings"):
                 return headings_data["headings"]
-        js_code = """
-        (function() {
+            if isinstance(headings_data, list):
+                return headings_data
+        
+        js_code = f"""
+        (function() {{
+            {get_shadow_piercing_script()}
             const headings = [];
-            const elements = document.querySelectorAll('h1, h2, h3, h4, h5, h6, [role="heading"]');
-            elements.forEach((el, index) => {
+            const elements = window._accessLensPierce(document, 'h1, h2, h3, h4, h5, h6, [role="heading"]');
+            elements.forEach((el, index) => {{
                 const rect = el.getBoundingClientRect();
                 if (rect.width === 0 || rect.height === 0) return;
                 let level = parseInt(el.tagName.substring(1));
-                if (isNaN(level)) {
+                if (isNaN(level)) {{
                     level = parseInt(el.getAttribute('aria-level')) || 2;
-                }
-                headings.push({
+                }}
+                headings.push({{
                     level: level,
                     text: el.textContent.trim(),
                     tagName: el.tagName.toLowerCase(),
-                    selector: getUniqueSelector(el),
+                    selector: window._accessLensGetSelector(el),
                     index: index,
                     isVisible: el.offsetWidth > 0 || el.offsetHeight > 0 || el.getClientRects().length > 0
-                });
-            });
+                }});
+            }});
             return headings;
-            function getUniqueSelector(el) {
-                if (el.id) return `#${CSS.escape(el.id)}`;
-                let path = [];
-                while (el && el.nodeType === Node.ELEMENT_NODE) {
-                    let selector = el.tagName.toLowerCase();
-                    const siblings = Array.from(el.parentNode ? el.parentNode.children : []).filter(c => c.tagName === el.tagName);
-                    if (siblings.length > 1) {
-                        const index = siblings.indexOf(el) + 1;
-                        selector += `:nth-child(${index})`;
-                    }
-                    path.unshift(selector);
-                    el = el.parentNode;
-                }
-                return path.join(' > ');
-            }
-        })();
+        }})();
         """
         try:
             return await page.evaluate(js_code)
@@ -130,46 +122,38 @@ class StructuralEngine(BaseAccessibilityEngine):
             self._logger.warning(f"Failed to extract headings: {e}")
             return []
 
-    async def _extract_landmarks(self, page: Page, accessibility_tree: Dict[str, Any]) -> List[Dict[str, Any]]:
+    async def _extract_landmarks(self, page: Page, page_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Extracts ARIA landmark roles (main, nav, header, etc.) from the page structure.
         """
-        if accessibility_tree.get("structure", {}).get("landmarks"):
-            landmarks_data = accessibility_tree["structure"]["landmarks"]
+        structure = page_data.get("structure", {})
+        if structure and structure.get("landmarks"):
+            landmarks_data = structure["landmarks"]
             if isinstance(landmarks_data, dict) and landmarks_data.get("landmarks"):
                 return landmarks_data["landmarks"]
-        js_code = """
-        (function() {
+            if isinstance(landmarks_data, list):
+                return landmarks_data
+        
+        js_code = f"""
+        (function() {{
+            {get_shadow_piercing_script()}
             const landmarks = [];
             const landmarkRoles = ['main', 'nav', 'navigation', 'header', 'banner', 'footer', 'contentinfo', 'aside', 'complementary', 'form', 'search', 'section', 'region'];
-            const elements = document.querySelectorAll(landmarkRoles.map(r => `[role="${r}"], ${r}`).join(', '));
-            elements.forEach(el => {
+            const selector = landmarkRoles.map(r => `[role="${{r}}"], ${{r}}`).join(', ');
+            const elements = window._accessLensPierce(document, selector);
+            
+            elements.forEach(el => {{
                 const role = el.getAttribute('role') || el.tagName.toLowerCase();
                 if (!landmarkRoles.includes(role)) return;
-                landmarks.push({
+                landmarks.push({{
                     role: role,
                     tag: el.tagName.toLowerCase(),
-                    selector: getUniqueSelector(el),
+                    selector: window._accessLensGetSelector(el),
                     label: el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') || ''
-                });
-            });
+                }});
+            }});
             return landmarks;
-            function getUniqueSelector(el) {
-                if (el.id) return `#${CSS.escape(el.id)}`;
-                let path = [];
-                while (el && el.nodeType === Node.ELEMENT_NODE) {
-                    let selector = el.tagName.toLowerCase();
-                    const siblings = Array.from(el.parentNode ? el.parentNode.children : []).filter(c => c.tagName === el.tagName);
-                    if (siblings.length > 1) {
-                        const index = siblings.indexOf(el) + 1;
-                        selector += `:nth-child(${index})`;
-                    }
-                    path.unshift(selector);
-                    el = el.parentNode;
-                }
-                return path.join(' > ');
-            }
-        })();
+        }})();
         """
         try:
             return await page.evaluate(js_code)
@@ -277,7 +261,17 @@ class StructuralEngine(BaseAccessibilityEngine):
             for main in main_landmarks:
                 main_selector = main.get("selector", "")
                 if main_selector:
-                    js_code = "(selector) => { const el = document.querySelector(selector); return el && (el.querySelector('h1, h2, h3, h4, h5, h6') !== null); }"
+                    # Updated to check inside the specific main element, potentially piercing its children
+                    js_code = f"""
+                    (selector) => {{
+                        {get_shadow_piercing_script()}
+                        // Note: If the main element itself is in a shadow root, document.querySelector might not find it directly.
+                        // However, we rely on the selector provided by our piercing logic.
+                        const container = window._accessLensPierce(document, '*').find(el => window._accessLensGetSelector(el) === selector);
+                        if (!container) return false;
+                        return window._accessLensPierce(container, 'h1, h2, h3, h4, h5, h6').length > 0;
+                    }}
+                    """
                     try:
                         has_heading = await page.evaluate(js_code, main_selector)
                         if not has_heading:
@@ -292,24 +286,25 @@ class StructuralEngine(BaseAccessibilityEngine):
         that should semantically be `button` or `a` tags, and redundant ARIA.
         """
         issues = []
-        js_code = """
-        () => {
+        js_code = f"""
+        () => {{
+            {get_shadow_piercing_script()}
             const results = [];
             
-            // 1. Clickable divs
-            const clickableDivs = document.querySelectorAll('div[onclick], div[onmousedown], div[onmouseup], [role="button"]:not(button):not(a)');
-            clickableDivs.forEach(div => {
-                results.push({
-                    type: 'clickable_div',
-                    selector: div.id ? '#' + div.id : 'div',
+            // 1. Clickable elements across all shadow roots
+            const clickableElements = window._accessLensPierce(document, 'div[onclick], div[onmousedown], div[onmouseup], [role="button"]:not(button):not(a)');
+            clickableElements.forEach(div => {{
+                results.push({{
+                    type: 'clickable_non_semantic',
+                    selector: window._accessLensGetSelector(div),
                     tag: div.tagName.toLowerCase(),
                     html: div.outerHTML.substring(0, 100)
-                });
-            });
+                }});
+            }});
 
-            // 2. Redundant ARIA
+            // 2. Redundant ARIA 
             const redundant = [];
-            const mappings = {
+            const mappings = {{
                 'nav': 'navigation',
                 'main': 'main',
                 'header': 'banner',
@@ -318,21 +313,23 @@ class StructuralEngine(BaseAccessibilityEngine):
                 'article': 'article',
                 'section': 'region',
                 'form': 'form'
-            };
-            for (const tag in mappings) {
-                const elements = document.querySelectorAll(`${tag}[role="${mappings[tag]}"]`);
-                elements.forEach(el => {
-                    redundant.push({
-                        selector: el.id ? '#' + el.id : tag,
+            }};
+            
+            for (const tag in mappings) {{
+                const selector = `${{tag}}[role="${{mappings[tag]}}"]`;
+                const elements = window._accessLensPierce(document, selector);
+                elements.forEach(el => {{
+                    redundant.push({{
+                        selector: window._accessLensGetSelector(el),
                         tag: tag,
                         role: mappings[tag],
                         html: el.outerHTML.substring(0, 100)
-                    });
-                });
-            }
+                    }});
+                }});
+            }}
             
-            return { clickable: results, redundant: redundant };
-        }
+            return {{ clickable: results, redundant: redundant }};
+        }}
         """
         try:
             analysis = await page.evaluate(js_code)

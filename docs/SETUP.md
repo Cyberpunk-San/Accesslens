@@ -79,7 +79,7 @@ The frontend is a Next.js application for visualizing audit results.
 
 ---
 
-## 3. Production Deployment (Docker)
+## 3. Production Deployment (Docker)(Prefer this)
 
 AccessLens uses a root-level `docker-compose.yml` for unified orchestration.
 
@@ -98,14 +98,21 @@ AccessLens uses a root-level `docker-compose.yml` for unified orchestration.
    docker-compose logs -f
    ```
 
+> [!TIP]
+> **Auditing Host Services**: If you are running AccessLens in Docker and want to audit a service running directly on your host machine (e.g., another dev server at `localhost:3001`), use `http://host.docker.internal:3001` in the audit URL. Inside a container, `localhost` refers to the container itself.
+>
+> ![Host Audit Success Example](./images/host_audit_success.jpeg)
+
 ---
 
 ## 4. Troubleshooting
 
 - **Browser Crashes**: Ensure `playwright install chromium` was successful and that your environment has required libraries.
 - **Database Errors**: If `accesslens.db` needs a reset, delete the file and restart the backend.
-- **Port Conflicts**: If port 3000 is occupied, stop any running `npm run dev` processes or other Docker containers.
-- **Native Binding Errors**: If you encounter `@tailwindcss/oxide` errors during Docker build, refer to the optimized `Dockerfile` which bypasses host lockfiles.
+- **Port Conflicts**: If the application fails to start because a port is in use, use the following commands (Windows):
+    - **Find PID**: `netstat -ano | findstr :<PORT>` (e.g., `netstat -ano | findstr :8000`)
+    - **Identify Process**: `tasklist /FI "PID eq <PID>"` or `Get-Process -Id <PID>`
+    - **Kill Process**: `taskkill /F /PID <PID>`
 
 ---
 *Built with precision for the modern web.*

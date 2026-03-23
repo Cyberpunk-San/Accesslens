@@ -10,6 +10,7 @@ from ..models.schemas import (
 from ..ai.llava_integration import LLaVAService
 from ..ai.mistral_integration import MistralService
 from ..core.config import settings
+from ..utils.shadow_dom import get_shadow_piercing_script
 
 class AIEngine(BaseAccessibilityEngine):
     """
@@ -159,6 +160,12 @@ class AIEngine(BaseAccessibilityEngine):
             issues.extend(layout_issues)
             interactive_issues = await self._analyze_interactive_patterns(accessibility_tree)
             issues.extend(interactive_issues)
+            ambiguous_issues = await self._analyze_ambiguous_labels(accessibility_tree)
+            issues.extend(ambiguous_issues)
+            repetitive_issues = await self._analyze_repetitive_content(accessibility_tree)
+            issues.extend(repetitive_issues)
+            ux_issues = await self._analyze_ux_best_practices(accessibility_tree)
+            issues.extend(ux_issues)
         except Exception as e:
             self._logger.error(f"Contextual analysis failed: {e}")
         return issues
@@ -202,19 +209,24 @@ class AIEngine(BaseAccessibilityEngine):
         if page:
             js_code = """
             () => {
+                """ + get_shadow_piercing_script() + """
                 const results = [];
-                const images = Array.from(document.querySelectorAll('img'));
+                const images = window._accessLensPierce(document, 'img');
                 images.forEach(img => {
                     const alt = img.getAttribute('alt');
+                    const title = img.getAttribute('title');
                     const src = img.getAttribute('src') || '';
                     const isVisible = img.offsetWidth > 0 && img.offsetHeight > 0;
                     
                     results.push({
                         alt: alt,
+                        title: title,
                         src: src.substring(src.lastIndexOf('/') + 1),
-                        selector: img.id ? '#' + img.id : 'img',
+                        selector: window._accessLensGetSelector(img),
                         html: img.outerHTML.substring(0, 100),
-                        visible: isVisible
+                        visible: isVisible,
+                        parentElement: img.parentElement ? img.parentElement.tagName.toLowerCase() : null,
+                        parentAriaLabel: img.parentElement ? img.parentElement.getAttribute('aria-label') : null
                     });
                 });
                 return results;
@@ -226,47 +238,75 @@ class AIEngine(BaseAccessibilityEngine):
                 
                 for f in findings:
                     alt = f['alt']
+                    selector = f['selector']
+                    html = f['html']
+                    visible = f['visible']
+                    
                     if alt is None:
                         # Missing alt attribute
                         issues.append(UnifiedIssue(
                             title="Missing alt attribute on image",
-                            description="Image lacks an 'alt' attribute. Screen readers may announce the filename instead, which is often not helpful.",
+                            description="Image lacks an 'alt' attribute. Screen readers may announce the filename instead.",
                             issue_type="missing_alt",
                             severity=IssueSeverity.SERIOUS,
                             confidence=ConfidenceLevel.HIGH,
                             confidence_score=100,
                             source=IssueSource.AI_CONTEXTUAL,
                             wcag_criteria=[WCAGCriteria(id="1.1.1", level="A", title="Non-text Content")],
-                            location=ElementLocation(selector=f['selector'], html=f['html']),
+                            location=ElementLocation(selector=selector, html=html),
                             engine_name=self.name,
-                            tags=["images", "alt-text"] + (["hidden"] if not f['visible'] else [])
+                            tags=["images", "alt-text"] + (["hidden"] if not visible else [])
                         ))
-                    elif alt.strip() == "":
-                        # Empty alt attribute - usually okay for decorative, but AI can flag if it seems important
-                        pass
-                    elif alt.lower().strip() in vague_alts or len(alt.strip()) < 5:
-                        # Non-descriptive or redundant alt text
+                    elif alt.lower().strip() in vague_alts or (alt.strip() and len(alt.strip()) < 5):
                         issues.append(UnifiedIssue(
                             title="Non-descriptive or redundant alt text",
-                            description=f"The alt text '{alt}' for this image is likely not descriptive enough or is redundant (e.g., just the organization name).",
+                            description=f"The alt text '{alt}' for this image is likely not descriptive enough.",
                             issue_type="vague_alt_text",
                             severity=IssueSeverity.MODERATE,
                             confidence=ConfidenceLevel.MEDIUM,
                             confidence_score=75,
                             source=IssueSource.AI_CONTEXTUAL,
                             wcag_criteria=[WCAGCriteria(id="1.1.1", level="A", title="Non-text Content")],
-                            location=ElementLocation(selector=f['selector'], html=f['html']),
-                            remediation=RemediationSuggestion(
-                                description="Provide a brief, meaningful description of the image content or its purpose.",
-                                estimated_effort="Low"
-                            ),
+                            location=ElementLocation(selector=selector, html=html),
                             engine_name=self.name,
-                            tags=["images", "alt-text", "quality"] + (["hidden"] if not f['visible'] else [])
+                            tags=["images", "alt-text", "quality"]
                         ))
+                    
+                    
+                    img_title = f.get('title')
+                    if img_title and alt and img_title.strip().lower() == alt.strip().lower():
+                        issues.append(UnifiedIssue(
+                            title="Redundant title attribute on image",
+                            description=f"The 'title' attribute is identical to the 'alt' text.",
+                            issue_type="redundant_title",
+                            severity=IssueSeverity.MINOR,
+                            confidence=ConfidenceLevel.HIGH,
+                            confidence_score=95,
+                            source=IssueSource.AI_CONTEXTUAL,
+                            location=ElementLocation(selector=selector, html=html),
+                            engine_name=self.name,
+                            tags=["images", "quality", "ux"]
+                        ))
+
+                    
+                    parent_tag = f.get('parentElement')
+                    if parent_tag in ['button', 'a'] and not f.get('parentAriaLabel'):
+                        if alt and alt.lower().strip() in vague_alts:
+                            issues.append(UnifiedIssue(
+                                title=f"Vague label for icon {parent_tag}",
+                                description=f"This {parent_tag} contains an image with vague alt text ('{alt}').",
+                                issue_type="vague_icon_label",
+                                severity=IssueSeverity.SERIOUS,
+                                confidence=ConfidenceLevel.HIGH,
+                                confidence_score=85,
+                                source=IssueSource.AI_CONTEXTUAL,
+                                location=ElementLocation(selector=selector, html=html),
+                                engine_name=self.name,
+                                tags=["ai", "ux", "interactive"]
+                            ))
             except Exception as e:
                 self._logger.warning(f"Failed to analyze alt text quality: {e}")
 
-        # Also keep focusable check for links/buttons
         focusable = accessibility_tree.get('structure', {}).get('focusable_elements', [])
         vague_phrases = ['click here', 'read more', 'learn more', 'link', 'continue', 'here']
         for element in focusable:
@@ -276,7 +316,7 @@ class AIEngine(BaseAccessibilityEngine):
                 if not name:
                     issues.append(UnifiedIssue(
                         title=f"Empty {role} found",
-                        description=f"This {role} element has no text content or accessible name, making it unusable for screen reader users.",
+                        description=f"This {role} element has no text content or accessible name.",
                         issue_type=f"empty_{role}",
                         severity=IssueSeverity.SERIOUS,
                         confidence=ConfidenceLevel.HIGH,
@@ -302,6 +342,65 @@ class AIEngine(BaseAccessibilityEngine):
 
         return issues
 
+    async def _analyze_ambiguous_labels(self, accessibility_tree: Dict) -> List[UnifiedIssue]:
+        issues = []
+        focusable = accessibility_tree.get('structure', {}).get('focusable_elements', [])
+        ambiguous_terms = ['button', 'click here', 'link', 'item', 'element', 'div', 'span']
+        for element in focusable:
+            name = element.get('name', '').lower().strip()
+            if name in ambiguous_terms:
+                issues.append(UnifiedIssue(
+                    title="Ambiguous accessibility label",
+                    description=f"The label '{name}' is non-descriptive.",
+                    issue_type="ambiguous_label",
+                    severity=IssueSeverity.SERIOUS,
+                    confidence=ConfidenceLevel.HIGH,
+                    confidence_score=90,
+                    source=IssueSource.AI_CONTEXTUAL,
+                    engine_name=self.name,
+                    tags=["ai", "ux", "semantics"]
+                ))
+        return issues
+
+    async def _analyze_repetitive_content(self, accessibility_tree: Dict) -> List[UnifiedIssue]:
+        issues = []
+        focusable = accessibility_tree.get('structure', {}).get('focusable_elements', [])
+        names = [e.get('name', '').lower().strip() for e in focusable if e.get('name')]
+        for i in range(len(names) - 3):
+            if names[i] == names[i+1] == names[i+2] == names[i+3] and len(names[i]) > 0:
+                issues.append(UnifiedIssue(
+                    title="Repetitive interactive labels detected",
+                    description=f"Multiple interactive elements share the identical label '{names[i]}'.",
+                    issue_type="repetitive_labels",
+                    severity=IssueSeverity.MODERATE,
+                    confidence=ConfidenceLevel.MEDIUM,
+                    confidence_score=75,
+                    source=IssueSource.AI_CONTEXTUAL,
+                    engine_name=self.name,
+                    tags=["ai", "ux", "redundancy"]
+                ))
+                break 
+        return issues
+
+    async def _analyze_ux_best_practices(self, accessibility_tree: Dict) -> List[UnifiedIssue]:
+        issues = []
+        stats = accessibility_tree.get('statistics', {})
+        total_elements = stats.get('total_elements', 0)
+        landmarks = stats.get('landmarks', 0)
+        if total_elements > 300 and landmarks < 2:
+            issues.append(UnifiedIssue(
+                title="Poor structural organization",
+                description="This complex page has very few semantic landmarks.",
+                issue_type="missing_landmarks_heuristic",
+                severity=IssueSeverity.SERIOUS,
+                confidence=ConfidenceLevel.HIGH,
+                confidence_score=90,
+                source=IssueSource.AI_CONTEXTUAL,
+                engine_name=self.name,
+                tags=["ai", "ux", "structure"]
+            ))
+        return issues
+
     async def _analyze_layout_complexity(self, dom_snapshot: Dict) -> List[UnifiedIssue]:
         total_elements = dom_snapshot.get('statistics', {}).get('total_elements', 0)
         viewport_height = settings.default_viewport_height
@@ -318,16 +417,11 @@ class AIEngine(BaseAccessibilityEngine):
         return []
 
     def _apply_self_doubt_filter(self, issues: List[UnifiedIssue]) -> List[UnifiedIssue]:
-        """
-        Filters out hallucinations, duplicate findings, and conflicting AI outputs.
-        """
         filtered = []
         seen_titles = set()
-        
         for issue in issues:
             # 1. Validation for malformed content
             if not issue.title or len(issue.description or "") < 10:
-                self._logger.debug(f"Filtering malformed AI issue: {issue.title}")
                 continue
                 
             # 2. De-duplication
@@ -344,20 +438,12 @@ class AIEngine(BaseAccessibilityEngine):
             issue.source = IssueSource.AI_CONTEXTUAL
             if not issue.priority:
                 issue.priority = TaskPriority.P2
-            
             if not issue.remediation:
                 issue.remediation = RemediationSuggestion(
                     description="AI analysis requires manual review for specific remediation.",
                     estimated_effort="medium"
                 )
-                
-            if not issue.remediation.estimated_fix_hours:
-                issue.remediation.estimated_fix_hours = 1.0
-            if not issue.remediation.verification_steps:
-               issue.remediation.verification_steps = ["Manual verification required for AI findings"]
-            
             filtered.append(issue)
-            
         return filtered
 
     def _get_confidence_level(self, score: float) -> ConfidenceLevel:

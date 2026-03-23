@@ -75,7 +75,7 @@ class AuditOrchestrator:
                 accessibility_tree=page_data.get("accessibility_tree"),
                 metadata={
                     "duration_seconds": round(time.time() - start_time, 2),
-                    "engines_run": request.engines,
+                    "engines_run": engines_to_run,
                     "full_screenshot": page_data.get("screenshot")
                 }
             )

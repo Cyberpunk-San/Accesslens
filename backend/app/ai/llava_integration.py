@@ -58,6 +58,14 @@ class LLaVAService:
                         "description": "The page has multiple overlapping elements in the header area.",
                         "reasoning": "High density of interactive elements detected without clear visual separation.",
                         "suggestion": "Increase padding and use clearer visual grouping for header elements."
+                    },
+                    {
+                        "issue_type": "unclear_hierarchy",
+                        "severity": "serious",
+                        "confidence": 0.78,
+                        "description": "Visual weight of sidebar elements competes with main content area.",
+                        "reasoning": "Color contrast and sizing between regions are too similar, confusing reading flow.",
+                        "suggestion": "Adjust grayscale balance to prioritize central content."
                     }
                 ]
             }

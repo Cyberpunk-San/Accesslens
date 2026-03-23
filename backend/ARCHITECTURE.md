@@ -24,7 +24,7 @@ graph TD
     B -->|Task ID| A
     B -->|Enqueue| C[Audit Orchestrator]
     C -->|Browser Launch| D[Playwright Instance]
-    D -->|Extract| E[DOM & AXTree]
+    D -->|Pierce Shadow DOM| E[Deep AXTree]
     D -->|Capture| F[Visual Screenshots]
     E & F -->|Async Analysis| G[Analysis Registry]
     G -->|Engine Result| H[Data Aggregator]
@@ -58,6 +58,12 @@ AccessLens "sees" the UI using **LLaVA**. This engine identifies visual barriers
 
 ### 2. Refactoring Synthesis (Mistral 7B)
 The system uses **Mistral 7B** to translate raw violations into production-ready code. Instead of vague warnings, it provides **Synthetic Code Patches**—accurate diffs showing exactly how to refactor the offending component.
+
+### 3. Contextual Heuristics (Evolutionary AI)
+Beyond vision and code, the AI layer now performs **Contextual Audits**:
+- **Ambiguous Label Detection**: Identifying vague terms like "click here".
+- **Repetitive Content Analysis**: Finding duplicate interactive labels.
+- **Structural UX Score**: Evaluating landmark density against page complexity.
 
 ---
 

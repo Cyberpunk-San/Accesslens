@@ -19,9 +19,16 @@ from ..core.audit_orchestrator import AuditOrchestrator
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Metrics initialization
+@router.get("/")
+async def api_root():
+    return {
+        "name": "AccessLens API",
+        "version": "1.0.0",
+        "documentation": "/docs",
+        "endpoints": ["/audit", "/engines", "/health"]
+    }
 
-# Custom Prometheus Metrics
+
 AUDIT_REQUESTS = Counter(
     'accesslens_audit_requests_total',
     'Total number of audit requests received',
@@ -49,7 +56,10 @@ async def start_audit(
     background_tasks: BackgroundTasks,
     request: Request
 ):
-    is_safe, error_msg = is_valid_url(audit_request.url, allow_private=settings.debug)
+    is_safe, error_msg = is_valid_url(
+        audit_request.url, 
+        allow_private=settings.allow_private_audits or settings.debug
+    )
     logger.info(f"URL Validation for {audit_request.url}: is_safe={is_safe}, error={error_msg}")
     
     if not is_safe:

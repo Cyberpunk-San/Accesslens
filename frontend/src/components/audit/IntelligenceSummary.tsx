@@ -75,6 +75,19 @@ export function IntelligenceSummary({ report }: IntelligenceSummaryProps) {
                 Analysis powered by {report.metadata.engines_run?.length || 0} active detectors. 
                 The <span className="text-slate-200 capitalize">{topEngines[0]?.[0]} engine</span> was the most active contributor, identifying <span className="text-slate-200">{topEngines[0]?.[1]}</span> distinct patterns.
               </p>
+              {report.metadata.stats?.shadow_elements > 0 && (
+                <div className="mt-4 p-4 bg-purple-500/5 rounded-2xl border border-purple-500/10 flex items-center gap-4 group/shadow">
+                  <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400 group-hover/shadow:scale-110 transition-transform">
+                    <Sparkles size={18} />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-purple-400 block mb-0.5">Boundary Piercing</span>
+                    <p className="text-xs font-bold text-slate-300">
+                      Successfully audited <span className="text-purple-300">{report.metadata.stats.shadow_elements}</span> elements within Shadow DOM roots.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
