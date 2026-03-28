@@ -96,7 +96,7 @@ The local engine has no restrictions—works on any site, including Shadow DOM-h
 ### Requirements
 - Docker Desktop (or Docker + Docker Compose)
 - 8GB+ RAM recommended
-- Keep at leat 5GB free for smooth functioning.
+- Keep at least 5GB free for smooth functioning.
 
 ---
 
@@ -221,7 +221,7 @@ graph TB
 | **AI Models** | LLaVA + Mistral 7B |
 | **Average Response Time** | ~232 ms |
 | **Development Duration** | 23 days |
-| **Total Commits** | 41 |
+| **Total Commits** | 42 |
 | **Lines of Code** | ~33,500 (excluding lockfiles) |
 
 ---
@@ -263,7 +263,7 @@ npm run dev
 ```bash
 cd backend
 pytest --cov=. --cov-report=term-missing
-# Coverage: 86%
+# Coverage: 85%
 ```
 
 ### Building Docker Image
@@ -285,7 +285,6 @@ Contributions are welcome. Please refer to the [Contributing Guide](./docs/CONTR
 *   **LLaVA** for vision-language model
 *   **Mistral AI** for code generation model
 *   **Playwright** for browser automation
-*   **Built for Accessibility**
 ---
 
 ## License
