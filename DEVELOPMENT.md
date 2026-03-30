@@ -61,7 +61,7 @@ Between March 13th and 17th, the team managed lab tests while troubleshooting in
 With mid semester exams starting on March 24th, we hit the ground running as soon as lab tests finished.
 - **Commit `0ca0c15` (March 23rd):** Significant enhancements including Shadow DOM files integration, SSRF network config changes, and AI engine improvements.
 
-**Current Status:** All core features are integrated and working. The demo is scheduled for March 25th, marking the culmination of our "Holi to Exams" sprint.
+**Current Status:** All core features are integrated and working. The demo was scheduled for March 25th, and finally integrated to the README on 28th March. Several changes were made to the README file to provide clear view for the reader, this marked the culmination of our "Holi to Exams" sprint.
 
 > [!IMPORTANT]
 > **Final Integration & Demo Readiness:** By March 23rd, all core features were complete and tested. The March 25th demo was scheduled to occur before final assessments, ensuring the team could demonstrate the complete system before commitments shifted elsewhere.
@@ -71,9 +71,11 @@ With mid semester exams starting on March 24th, we hit the ground running as soo
 ## Development By The Numbers
 - **Total Commits:** 36 (March 1-23, 2026)
 - **Lines of Code:** ~44,500 total lines (including ~6,000 lines in `package-lock.json`)
-- **Test Coverage:** 86% test coverage
+- **Test Coverage:** 85% test coverage
 - **Documentation:** All docs with every minute detail captured.
 - **Team Velocity:** 4 developers, ~23 development days, 7 engine systems
 
 ---
-*Created by the AccessLens Team: Upanshi Mittal, Sansriti Mishra, Toyesh Gupta, and Sara Jain.*
+*Project Accesslens Finally Completed*
+---
+*Created by Team Spidey Sensers: Upanshi Mittal, Sansriti Mishra, Toyesh Gupta and Sara Jain.*
