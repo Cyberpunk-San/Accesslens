@@ -221,8 +221,8 @@ graph TB
 | **AI Models** | LLaVA + Mistral 7B |
 | **Average Response Time** | ~232 ms |
 | **Development Duration** | 23 days |
-| **Total Commits** | 42 |
-| **Lines of Code** | ~33,500 (excluding lockfiles) |
+| **Total Commits** | 44 |
+| **Lines of Code** | ~38,500 (excluding lockfiles) |
 
 ---
 
