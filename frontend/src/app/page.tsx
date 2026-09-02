@@ -88,7 +88,7 @@ export default function HomePage() {
             className="absolute text-[9px] font-mono text-brand-500 tracking-[0.3em] font-black"
             style={{ top: `${20 + i * 15}%`, right: `${5 + (i * 12) % 30}%` }}
           >
-            0x{hex} // INTEL_SYSTEM_V{i}.0
+            0x{hex} {'//'} INTEL_SYSTEM_V{i}.0
           </motion.div>
         ))}
       </div>
@@ -156,7 +156,7 @@ export default function HomePage() {
       <section id="how-it-works" className="relative z-10 pt-24 pb-40">
         <div className="container-custom">
           <div className="text-center mb-20 space-y-4">
-            <h2 className="text-2xl font-mono font-black uppercase tracking-[0.3em] text-brand-500">// The AccessLens Protocol</h2>
+            <h2 className="text-2xl font-mono font-black uppercase tracking-[0.3em] text-brand-500">{'//'} The AccessLens Protocol</h2>
             <div className="h-1 w-20 bg-brand-500/20 mx-auto"></div>
           </div>
 
