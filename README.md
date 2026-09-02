@@ -5,6 +5,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg?style=for-the-badge)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-4.5GB%20optimized-2496ED?logo=docker&style=for-the-badge)](https://www.docker.com/)
+[![CI](https://github.com/Cyberpunk-San/Accesslens/actions/workflows/ci.yml/badge.svg)](https://github.com/Cyberpunk-San/Accesslens/actions/workflows/ci.yml)
+[![CD](https://github.com/Cyberpunk-San/Accesslens/actions/workflows/cd.yml/badge.svg)](https://github.com/Cyberpunk-San/Accesslens/actions/workflows/cd.yml)
 [![Tests](https://img.shields.io/badge/tests-85%25-2ea44f?style=for-the-badge)](https://github.com/Upanshi-Mittal/Accesslens)
 [![Deployed](https://img.shields.io/badge/deployed-vercel%20%7C%20huggingface-000000?style=for-the-badge)](https://accesslens-azure.vercel.app/)
 
@@ -238,6 +240,7 @@ For detailed documentation on specific system components:
 | [Backend API](./backend/API.md) | FastAPI endpoints, engine registry, Playwright integration |
 | [Contributing Guide](./docs/CONTRIBUTING.md) | Contribution guidelines, code style, PR process |
 | [Setup & Deployment](./docs/SETUP.md) | Detailed installation, environment variables, deployment |
+| [CI/CD Pipeline Setup](./docs/CICD_SETUP.md) | Automated testing, GHCR publishing, and deployment workflows |
 | [Development Journey](./DEVELOPMENT.md) | Project evolution, challenges, and milestones |
 
 ---

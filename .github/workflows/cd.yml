@@ -1,0 +1,164 @@
+name: Continuous Deployment (CD)
+
+on:
+  push:
+    branches: [main, master]
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      deploy_target:
+        description: 'Deployment target'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - ghcr_only
+          - vercel_only
+          - huggingface_only
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # -------------------------------------------------------------
+  # Job 1: Build & Publish Container Images to GitHub Container Registry (GHCR)
+  # -------------------------------------------------------------
+  publish-containers:
+    name: Build & Publish to GHCR
+    if: ${{ github.event.inputs.deploy_target == null || github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'ghcr_only' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- Backend Container ---
+      - name: Extract Metadata (Backend)
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/backend
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build & Push Backend Container
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # --- Frontend Container ---
+      - name: Extract Metadata (Frontend)
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/frontend
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build & Push Frontend Container
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ secrets.PROD_API_URL || 'http://localhost:8000/api/v1' }}
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # -------------------------------------------------------------
+  # Job 2: Deploy Frontend to Vercel
+  # -------------------------------------------------------------
+  deploy-frontend-vercel:
+    name: Deploy Frontend (Vercel)
+    if: ${{ github.event.inputs.deploy_target == null || github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'vercel_only' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Check Vercel Credentials
+        id: vercel-check
+        run: |
+          if [ -n "${{ secrets.VERCEL_TOKEN }}" ] && [ -n "${{ secrets.VERCEL_ORG_ID }}" ] && [ -n "${{ secrets.VERCEL_PROJECT_ID }}" ]; then
+            echo "has_credentials=true" >> $GITHUB_OUTPUT
+            echo "Vercel credentials detected. Proceeding with deployment."
+          else
+            echo "has_credentials=false" >> $GITHUB_OUTPUT
+            echo "::notice ::Vercel secrets (VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID) not configured. Skipping Vercel deployment. (See docs/CICD_SETUP.md)"
+          fi
+
+      - name: Deploy to Vercel (Production)
+        if: steps.vercel-check.outputs.has_credentials == 'true'
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: ./frontend
+          vercel-args: '--prod'
+
+  # -------------------------------------------------------------
+  # Job 3: Deploy Backend to Hugging Face Spaces
+  # -------------------------------------------------------------
+  deploy-backend-huggingface:
+    name: Deploy Backend (Hugging Face Spaces)
+    if: ${{ github.event.inputs.deploy_target == null || github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'huggingface_only' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check Hugging Face Credentials
+        id: hf-check
+        run: |
+          if [ -n "${{ secrets.HF_TOKEN }}" ] && [ -n "${{ secrets.HF_SPACE_REPO }}" ]; then
+            echo "has_credentials=true" >> $GITHUB_OUTPUT
+            echo "Hugging Face credentials detected. Proceeding with deployment sync."
+          else
+            echo "has_credentials=false" >> $GITHUB_OUTPUT
+            echo "::notice ::Hugging Face secrets (HF_TOKEN, HF_SPACE_REPO) not configured. Skipping Hugging Face deployment. (See docs/CICD_SETUP.md)"
+          fi
+
+      - name: Sync Repository to Hugging Face Spaces
+        if: steps.hf-check.outputs.has_credentials == 'true'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE_REPO: ${{ secrets.HF_SPACE_REPO }}
+        run: |
+          git config --global user.email "bot@accesslens.dev"
+          git config --global user.name "AccessLens CI/CD"
+          git remote add hf "https://user:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE_REPO}"
+          git push --force hf main:main || echo "Hugging Face sync attempted."
